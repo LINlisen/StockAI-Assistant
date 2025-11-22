@@ -36,10 +36,53 @@ class StockAI_Gemini_Streamlit:
         if api_key and genai:
             try:
                 genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel("gemini-1.5-flash") # 使用 Flash 速度較快
+                self.model = self.find_best_model()
             except Exception as e:
                 st.error(f"Gemini 初始化失敗: {e}")
 
+    def find_best_model(self):
+        """ 自動列出帳號可用模型，並選擇最佳的一個 """
+        print("🔍 正在偵測您的 API 可用模型...")
+        try:
+            available_models = []
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    available_models.append(m.name)
+            
+            # 優先順序: 1.5-flash (快) -> 1.5-pro (強) -> 1.0-pro (穩) -> 隨便一個
+            target_model = None
+            for m in available_models:
+                if "gemini-1.5-flash" in m:
+                    target_model = m
+                    break
+            
+            if not target_model:
+                for m in available_models:
+                    if "gemini-1.5-pro" in m:
+                        target_model = m
+                        break
+            
+            if not target_model:
+                for m in available_models:
+                    if "gemini-pro" in m:
+                        target_model = m
+                        break
+            
+            # 如果都沒對應到，就選列表中的第一個
+            if not target_model and available_models:
+                target_model = available_models[0]
+                
+            if target_model:
+                print(f"✅ 已自動選定模型: {target_model}")
+                return genai.GenerativeModel(target_model)
+            else:
+                print("⚠️ 找不到任何支援 generateContent 的模型，請檢查 API Key 權限。")
+                return None
+                
+        except Exception as e:
+            print(f"無法列出模型 (可能是 API Key 無效或網路問題): {e}")
+            return None
+        
     def fetch_data(self):
         with st.spinner(f"正在抓取 {self.ticker_raw} 數據..."):
             try:
