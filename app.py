@@ -132,7 +132,8 @@ class StockAI_Gemini_Streamlit:
             任務:
             1. 給出明確操作建議 (買進/賣出/續抱/止損)。
             2. 指出關鍵支撐與壓力價位。
-            3. 使用條列式，口語化，300字內。
+            3. 使用條列式，口語化，400字內。
+            4. 給出明確的價位操作，是否適合作為隔日沖的標的。
             """
             try:
                 response = self.model.generate_content(prompt)
