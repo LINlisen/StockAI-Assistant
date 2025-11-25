@@ -4,8 +4,10 @@ import requests
 import pandas as pd
 import mplfinance as mpf
 
-# 設定後端網址
-BACKEND_URL = "http://127.0.0.1:8000"
+if "BACKEND_URL" in st.secrets:
+    BACKEND_URL = st.secrets["BACKEND_URL"]  # 這是給雲端用的
+else:
+    BACKEND_URL = "http://127.0.0.1:8000"    # 這是給你本機測試用的
 
 st.set_page_config(page_title="台股 AI 操盤系統", layout="wide")
 
