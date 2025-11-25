@@ -149,10 +149,10 @@ def analysis_page():
         # 2. 模型選擇邏輯
         # 為了避免每次畫面刷新都去敲後端 API，我們用 session_state 存起來
         if "model_list" not in st.session_state:
-            st.session_state.model_list = ["models/gemini-1.5-flash"] # 預設值
+            st.session_state.model_list = ["models/gemini-2.0-flash"] # 預設值
 
         # 當有 API Key 且按下重新整理按鈕，或是剛載入時嘗試獲取
-        col_m1, col_m2 = st.columns([3, 1])
+        col_m1, col_m2 = st.columns([4, 1])
         if col_m2.button("🔄", help="更新模型列表"):
             if api_key_input:
                 try:
@@ -169,7 +169,7 @@ def analysis_page():
         st.divider()
 
         stock_id = st.text_input("股票代號", "2330")
-        mode = st.selectbox("操作方向", ["Long", "Short"])
+        mode = st.selectbox("操作方向", ["做多", "做空"])
         cost = st.number_input("成本", 0.0)
         run_btn = st.button("🚀 開始分析", type="primary")
 
@@ -182,6 +182,7 @@ def analysis_page():
         with st.spinner(f"正在呼叫 {selected_model} 進行分析..."):
             try:
                 payload = {
+                    "user_id": user['id'],
                     "stock_id": stock_id,
                     "mode": mode,
                     "cost": cost,
@@ -209,6 +210,61 @@ def analysis_page():
                     st.error(f"分析失敗: {res.text}")
             except Exception as e:
                 st.error(f"錯誤: {e}")
+
+# ==========================================
+#  頁面 D: 歷史紀錄頁面 (新增)
+# ==========================================
+def history_page():
+    st.title("📜 歷史詢問紀錄")
+    user = st.session_state.user_info
+    
+    # 呼叫後端 API 獲取資料
+    try:
+        res = requests.get(f"{BACKEND_URL}/api/history/{user['id']}")
+        
+        if res.status_code == 200:
+            history_data = res.json()
+            
+            if not history_data:
+                st.info("目前還沒有任何紀錄喔！快去分析幾支股票吧。")
+                return
+
+            # 將資料轉為 DataFrame 以便顯示表格
+            df = pd.DataFrame(history_data)
+            
+            # 美化時間格式
+            df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime('%Y-%m-%d %H:%M')
+            
+            # 顯示摘要表格
+            st.dataframe(
+                df[['created_at', 'stock_id', 'mode', 'current_price', 'cost_price']],
+                column_config={
+                    "created_at": "查詢時間",
+                    "stock_id": "代號",
+                    "mode": "方向",
+                    "current_price": "當時股價",
+                    "cost_price": "成本"
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            st.subheader("詳細分析內容")
+            # 使用 Expander 顯示詳細 AI 建議，避免畫面太亂
+            for item in history_data:
+                time_str = pd.to_datetime(item['created_at']).strftime('%Y-%m-%d %H:%M')
+                label = f"[{time_str}] {item['stock_id']} ({item['mode']}) - ${item['current_price']}"
+                
+                with st.expander(label):
+                    st.markdown(f"**成本:** {item['cost_price']}")
+                    st.markdown("---")
+                    st.markdown(item['ai_advice'])
+        else:
+            st.error("無法取得歷史紀錄")
+            
+    except Exception as e:
+        st.error(f"連線錯誤: {e}")
+
 # ==========================================
 #  主導航控制器 (Navigation)
 # ==========================================
@@ -218,7 +274,7 @@ def main_controller():
         st.write(f"👤 您好，**{st.session_state.user_info['username']}**")
         
         # 頁面切換選單
-        page = st.radio("前往頁面", ["📈 操盤分析", "👤 個人設定"])
+        page = st.radio("前往頁面", ["📈 操盤分析", "📜 歷史紀錄", "👤 個人設定"])
         
         st.divider()
         if st.button("登出"):
@@ -229,6 +285,8 @@ def main_controller():
     # 根據選單顯示對應頁面
     if page == "📈 操盤分析":
         analysis_page()
+    elif page == "📜 歷史紀錄":  # <--- 新增路由
+        history_page()
     elif page == "👤 個人設定":
         settings_page()
 

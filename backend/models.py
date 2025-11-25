@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
 
@@ -13,6 +14,8 @@ class User(Base):
     api_token = Column(String, nullable=True)          # Gemini API Key (選填)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    logs = relationship("AnalysisLog", back_populates="owner")
+
 class AnalysisLog(Base):
     """
     分析紀錄表 (analysis_logs)
@@ -22,6 +25,8 @@ class AnalysisLog(Base):
 
     # 主鍵 ID，自動遞增
     id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id")) 
     
     # 股票代號 (例如: 2330.TW)，建立索引以加快搜尋速度
     stock_id = Column(String(20), index=True)
@@ -40,6 +45,9 @@ class AnalysisLog(Base):
     
     # 建立時間 (自動填入伺服器當下時間)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # 建立關聯
+    owner = relationship("User", back_populates="logs")
 
     def __repr__(self):
         return f"<AnalysisLog(id={self.id}, stock={self.stock_id}, date={self.created_at})>"

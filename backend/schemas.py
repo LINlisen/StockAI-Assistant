@@ -1,15 +1,28 @@
 # backend/schemas.py
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
+from datetime import datetime
 
 # --- 原有的 Stock 相關 schema 保持不變 ---
 class StockAnalysisRequest(BaseModel):
+    user_id: int
     stock_id: str
     mode: str
     cost: float
     api_key: str
     model_name: str = "models/gemini-1.5-flash"  # 設定預設值
+    
+class AnalysisLogResponse(BaseModel):
+    id: int
+    stock_id: str
+    mode: str
+    cost_price: float
+    current_price: float
+    ai_advice: str
+    created_at: datetime
 
+    class Config:
+        from_attributes = True # 讓 Pydantic 可以讀取 ORM 物件
 class StockAnalysisResponse(BaseModel):
     stock_id: str
     current_price: float

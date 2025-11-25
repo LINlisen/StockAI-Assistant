@@ -1,4 +1,5 @@
 # backend/main.py
+from typing import List
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 import json
@@ -79,7 +80,7 @@ def analyze_stock(req: schemas.StockAnalysisRequest, db: Session = Depends(get_d
         
         # 3. 呼叫 AI
         ai_result = ai_service.get_analysis(
-            api_key=req.api_key,
+             api_key=req.api_key,
             stock_id=req.stock_id,
             mode=req.mode,
             cost=req.cost,
@@ -89,6 +90,7 @@ def analyze_stock(req: schemas.StockAnalysisRequest, db: Session = Depends(get_d
 
         # 4. 存入資料庫 (PostgreSQL)
         db_log = models.AnalysisLog(
+            user_id=req.user_id,
             stock_id=req.stock_id,
             mode=req.mode,
             cost_price=req.cost,
@@ -119,6 +121,15 @@ def analyze_stock(req: schemas.StockAnalysisRequest, db: Session = Depends(get_d
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"系統錯誤: {str(e)}")
     
+@app.get("/api/history/{user_id}", response_model=List[schemas.AnalysisLogResponse])
+def get_user_history(user_id: int, db: Session = Depends(get_db)):
+    # 根據 user_id 查詢，並依時間倒序排列 (最新的在前面)
+    logs = db.query(models.AnalysisLog)\
+             .filter(models.AnalysisLog.user_id == user_id)\
+             .order_by(models.AnalysisLog.created_at.desc())\
+             .all()
+    return logs
+
 @app.put("/api/users/{user_id}", response_model=schemas.UserResponse)
 def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
     # 1. 找人
