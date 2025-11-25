@@ -1,8 +1,12 @@
-streamlit
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+python-dotenv
+google-generativeai
 yfinance
 pandas
+numpy
+pydantic
 mplfinance
-google-generativeai
-python-dotenv
-psycopg2-binary
-uvicorn
+streamlit
