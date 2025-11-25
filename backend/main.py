@@ -6,10 +6,11 @@ import json
 import hashlib
 
 # 匯入我們剛寫好的模組
-from .database import get_db, engine
-from . import models, schemas
-from .services.stock_service import StockService
-from .services.ai_service import AIService
+from database import get_db, engine
+import models
+import schemas
+from services.stock_service import StockService
+from services.ai_service import AIService
 
 # 初始化 DB
 models.Base.metadata.create_all(bind=engine)
