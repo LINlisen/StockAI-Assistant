@@ -21,7 +21,8 @@ if not SQLALCHEMY_DATABASE_URL:
 connect_args = {"check_same_thread": False} if "sqlite" in SQLALCHEMY_DATABASE_URL else {}
 
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args=connect_args
+    SQLALCHEMY_DATABASE_URL, 
+    pool_pre_ping=True  
 )
 
 # 4. 建立 Session 工廠
