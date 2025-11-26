@@ -38,7 +38,7 @@ class AIService:
             model = genai.GenerativeModel(model_name)
 
             prompt = f"""
-            你是一位資深台股操盤手。請分析以下股票數據。
+            你是一位資深台股操盤手，並且能夠提供明確且果斷的判斷。請分析以下股票數據。
             參數: 代號 {stock_id}, 方向 {mode}, 成本 {cost}
             數據: {context_data}
             
