@@ -4,10 +4,19 @@ import requests
 import pandas as pd
 import mplfinance as mpf
 
-if "BACKEND_URL" in st.secrets:
-    BACKEND_URL = st.secrets["BACKEND_URL"]  # 這是給雲端用的
-else:
-    BACKEND_URL = "http://127.0.0.1:8000"    # 這是給你本機測試用的
+# 使用 try-except 包起來
+try:
+    # 嘗試讀取 secrets，如果沒有檔案會報錯，就會跳到 except
+    if "BACKEND_URL" in st.secrets:
+        BACKEND_URL = st.secrets["BACKEND_URL"]
+    else:
+        BACKEND_URL = "http://127.0.0.1:8000"
+except FileNotFoundError:
+    # 如果本地沒有 secrets.toml 檔案，就預設使用 localhost
+    BACKEND_URL = "http://127.0.0.1:8000"
+except Exception:
+    # 捕捉其他可能的 secrets 錯誤
+    BACKEND_URL = "http://127.0.0.1:8000"
 
 st.set_page_config(page_title="台股 AI 操盤系統", layout="wide")
 
@@ -266,7 +275,94 @@ def history_page():
             
     except Exception as e:
         st.error(f"連線錯誤: {e}")
+# ==========================================
+#  頁面 E: 智慧選股頁面 (新增)
+# ==========================================
+def screener_page():
+    st.title("🔍 智慧選股掃描")
+    st.info("💡 說明：系統將掃描「台灣 50」成分股，找出符合您勾選策略的股票。")
 
+    # 策略選擇區
+    st.subheader("1. 選擇策略條件")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        s1 = st.checkbox("MA20 突破季線且站上半年線 (趨勢轉強)", value=True, key="s1")
+        s2 = st.checkbox("KD 低檔黃金交叉 (短線買點)", key="s2")
+        s3 = st.checkbox("均線多頭排列 (強勢股)", key="s3")
+    with col2:
+        s4 = st.checkbox("爆量長紅 (主力進場)", key="s4")
+        s5 = st.checkbox("RSI 超賣 < 30 (搶反彈)", key="s5")
+
+    # 收集選中的策略
+    selected_strategies = []
+    if s1: selected_strategies.append("MA_Cross_Major")
+    if s2: selected_strategies.append("KD_Golden_Cross")
+    if s3: selected_strategies.append("Bullish_Alignment")
+    if s4: selected_strategies.append("Volume_Explosion")
+    if s5: selected_strategies.append("RSI_Oversold")
+
+    if st.button("🚀 開始掃描", type="primary"):
+        if not selected_strategies:
+            st.warning("請至少勾選一個策略！")
+            return
+
+        st.write("⏳ 正在掃描市場數據，請稍候 (約需 10-15 秒)...")
+        progress_bar = st.progress(0)
+        
+        try:
+            # 呼叫後端 API
+            payload = {
+                "strategies": selected_strategies,
+                "scope": "TW50"
+            }
+            # 假裝跑一下進度條讓使用者覺得有在動
+            progress_bar.progress(30)
+            
+            res = requests.post(f"{BACKEND_URL}/api/screen", json=payload)
+            progress_bar.progress(100)
+            
+            if res.status_code == 200:
+                data = res.json()
+                
+                if not data:
+                    st.warning("⚠️ 目前沒有股票符合您設定的條件。")
+                else:
+                    st.success(f"🎉 找到 {len(data)} 檔符合條件的股票！")
+                    
+                    # 整理成 DataFrame 顯示
+                    df_res = pd.DataFrame(data)
+                    # 把 list 轉成字串比較好顯示
+                    df_res['matched_strategies'] = df_res['matched_strategies'].apply(lambda x: ", ".join(x))
+                    
+                    st.dataframe(
+                        df_res,
+                        column_config={
+                            "stock_id": "股票代號",
+                            "name": "名稱",
+                            "close": "收盤價",
+                            "matched_strategies": "符合條件"
+                        },
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # 進階互動：點擊後直接跳轉去分析
+                    st.divider()
+                    st.markdown("### 👇 快速分析")
+                    target = st.selectbox("選擇一檔股票進行 AI 分析", df_res['stock_id'])
+                    
+                    if st.button("分析這檔股票"):
+                        # 這邊我們可以用 session_state 傳值並跳轉頁面
+                        st.session_state['analysis_stock_id'] = target
+                        st.switch_page("frontend/app.py") # 注意：如果你是單頁應用，這邊可能要改用 session_state 變數控制頁面切換
+                        # 簡單一點的做法：
+                        st.info(f"請複製代號 **{target}**，切換到「操盤分析」頁面輸入。")
+            else:
+                st.error(f"掃描失敗: {res.text}")
+                
+        except Exception as e:
+            st.error(f"連線錯誤: {e}")
 # ==========================================
 #  主導航控制器 (Navigation)
 # ==========================================
@@ -276,7 +372,7 @@ def main_controller():
         st.write(f"👤 您好，**{st.session_state.user_info['username']}**")
         
         # 頁面切換選單
-        page = st.radio("前往頁面", ["📈 操盤分析", "📜 歷史紀錄", "👤 個人設定"])
+        page = st.radio("前往頁面", ["📈 操盤分析", "🔍 智慧選股", "📜 歷史紀錄", "👤 個人設定"])
         
         st.divider()
         if st.button("登出"):
@@ -287,6 +383,8 @@ def main_controller():
     # 根據選單顯示對應頁面
     if page == "📈 操盤分析":
         analysis_page()
+    elif page == "🔍 智慧選股":  # <--- 新增路由
+         screener_page()
     elif page == "📜 歷史紀錄":  # <--- 新增路由
         history_page()
     elif page == "👤 個人設定":

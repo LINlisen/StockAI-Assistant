@@ -1,6 +1,6 @@
 # backend/schemas.py
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 # --- 原有的 Stock 相關 schema 保持不變 ---
@@ -29,6 +29,20 @@ class StockAnalysisResponse(BaseModel):
     trend: str
     ai_analysis: str
     technical_data: Dict[str, Any]
+
+# 新增：選股請求
+class ScreenRequest(BaseModel):
+    # 策略清單，例如 ["MA_Cross", "KD_Gold"]
+    strategies: List[str] 
+    # 掃描範圍，預設 "TW50" (台灣50)
+    scope: str = "TW50" 
+
+# 新增：選股結果 (單檔股票)
+class ScreenResult(BaseModel):
+    stock_id: str
+    name: str # 股票名稱 (選填，目前 yfinance 抓名稱較慢，可先用代號)
+    close: float
+    matched_strategies: List[str] # 符合了哪些策略
 
 # --- 新增：用來請求模型列表的格式 ---
 class APIKeyRequest(BaseModel):

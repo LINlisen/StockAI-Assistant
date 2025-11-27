@@ -54,6 +54,7 @@ def get_models(req: schemas.APIKeyRequest):
         return ["models/gemini-1.5-flash", "models/gemini-pro", "models/gemini-1.5-pro"]
     return models
 
+
 # --- 2. 使用者登入 API ---
 @app.post("/api/login", response_model=schemas.UserResponse)
 def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
@@ -122,6 +123,21 @@ def analyze_stock(req: schemas.StockAnalysisRequest, db: Session = Depends(get_d
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"系統錯誤: {str(e)}")
     
+
+@app.post("/api/screen", response_model=List[schemas.ScreenResult])
+def screen_stocks(req: schemas.ScreenRequest, db: Session = Depends(get_db)):
+    try:
+        # 如果使用者沒選任何策略，就預設全部檢查
+        target_strategies = req.strategies if req.strategies else ["MA_Cross_Major", "KD_Golden_Cross"]
+        
+        # 執行選股
+        results = stock_service.screen_stocks(target_strategies)
+        
+        return results
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/history/{user_id}", response_model=List[schemas.AnalysisLogResponse])
 def get_user_history(user_id: int, db: Session = Depends(get_db)):
     # 根據 user_id 查詢，並依時間倒序排列 (最新的在前面)
