@@ -150,6 +150,7 @@ class StockService:
             if matched_strats:
                 results.append({
                     "stock_id": stock_id,
+                    "name": stock_id, 
                     "close": round(df.iloc[-1]['Close'], 2),
                     "matched_strategies": matched_strats
                 })

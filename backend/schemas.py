@@ -40,9 +40,9 @@ class ScreenRequest(BaseModel):
 # 新增：選股結果 (單檔股票)
 class ScreenResult(BaseModel):
     stock_id: str
-    name: str # 股票名稱 (選填，目前 yfinance 抓名稱較慢，可先用代號)
+    name: Optional[str] = None  
     close: float
-    matched_strategies: List[str] # 符合了哪些策略
+    matched_strategies: List[str]
 
 # --- 新增：用來請求模型列表的格式 ---
 class APIKeyRequest(BaseModel):
