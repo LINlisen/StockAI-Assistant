@@ -363,6 +363,96 @@ def screener_page():
                 
         except Exception as e:
             st.error(f"連線錯誤: {e}")
+
+def backtest_page():
+    st.title("🔙 智能策略回測")
+    
+    user = st.session_state.user_info
+    
+    col_set1, col_set2 = st.columns(2)
+    
+    with col_set1:
+        # 選擇 AI 提供者
+        ai_provider = st.radio("選擇 AI 模型來源", ["Google Gemini (雲端)", "Ollama (本地)"], horizontal=True)
+        provider_code = "gemini" if "Gemini" in ai_provider else "ollama"
+
+    with col_set2:
+        if provider_code == "gemini":
+            # Gemini 設定
+            saved_token = user.get("api_token") or ""
+            api_key = st.text_input("Gemini API Key", value=saved_token, type="password")
+            model_name = st.selectbox("模型版本", ["gemini-1.5-flash", "gemini-pro"])
+        else:
+            # Ollama 設定
+            api_key = "ollama_no_key" # Ollama 不需要 Key，但後端需要字串
+            # 這裡可以讓使用者自己輸入，或者寫死你有裝的模型
+            model_name = st.text_input("Ollama 模型名稱", "llama3.2", help="請確保本地已執行 `ollama run <模型名>`")
+            st.caption("⚠️ 須確保後端電腦已安裝 Ollama 並開啟服務 (port 11434)")
+
+    st.divider()
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        stock_id = st.text_input("回測股票代號", "2330")
+    with c2:
+        capital = st.number_input("初始資金", value=100000, step=10000)
+
+    if st.button("🚀 開始回測", type="primary"):
+        if provider_code == "gemini" and not api_key:
+            st.error("Gemini 模式需要 API Key")
+            return
+            
+        with st.spinner(f"正在使用 {provider_code}/{model_name} 進行回測..."):
+            try:
+                payload = {
+                    "user_id": user['id'],
+                    "stock_id": stock_id,
+                    "initial_capital": capital,
+                    "api_key": api_key,
+                    "provider": provider_code,
+                    "model_name": model_name
+                }
+                res = requests.post(f"{BACKEND_URL}/api/backtest", json=payload)
+                
+                if res.status_code == 200:
+                    data = res.json()
+                    
+                    if "error" in data:
+                        st.error(data["error"])
+                        return
+
+                    # --- 顯示 KPI ---
+                    kpi1, kpi2, kpi3 = st.columns(3)
+                    kpi1.metric("初始資金", f"${data['initial_capital']:,}")
+                    kpi2.metric("最終資產", f"${data['final_equity']:,}", delta=f"{data['total_return_pct']}%")
+                    kpi3.metric("總交易次數", data['trade_count'])
+
+                    # --- 繪製資產曲線 ---
+                    st.subheader("📈 資產成長曲線")
+                    ec_df = pd.DataFrame(data['equity_curve'])
+                    ec_df['date'] = pd.to_datetime(ec_df['date'])
+                    ec_df.set_index('date', inplace=True)
+                    st.line_chart(ec_df['equity'])
+
+                    # --- 顯示交易明細 ---
+                    st.subheader("📋 交易明細")
+                    if data['trades']:
+                        trades_df = pd.DataFrame(data['trades'])
+                        st.dataframe(
+                            trades_df[['entry_date', 'exit_date', 'type', 'entry_price', 'exit_price', 'profit', 'profit_pct', 'reason']],
+                            column_config={
+                                "profit": st.column_config.NumberColumn("損益 (含稅)", format="$%d"),
+                                "profit_pct": st.column_config.NumberColumn("報酬率", format="%.2f%%"),
+                            },
+                            use_container_width=True
+                        )
+                    else:
+                        st.info("這段期間 AI 選擇觀望，沒有進行任何交易。")
+
+                else:
+                    st.error(f"回測失敗: {res.text}")
+            except Exception as e:
+                st.error(f"連線錯誤: {e}")
 # ==========================================
 #  主導航控制器 (Navigation)
 # ==========================================
@@ -372,7 +462,7 @@ def main_controller():
         st.write(f"👤 您好，**{st.session_state.user_info['username']}**")
         
         # 頁面切換選單
-        page = st.radio("前往頁面", ["📈 操盤分析", "🔍 智慧選股", "📜 歷史紀錄", "👤 個人設定"])
+        page = st.radio("前往頁面", ["📈 操盤分析", "🔍 智慧選股", "📜 歷史紀錄","🚀 模型回測" ,"👤 個人設定"])
         
         st.divider()
         if st.button("登出"):
@@ -387,6 +477,8 @@ def main_controller():
          screener_page()
     elif page == "📜 歷史紀錄":  # <--- 新增路由
         history_page()
+    elif page == "🚀 模型回測":  # <--- 新增路由
+        backtest_page()
     elif page == "👤 個人設定":
         settings_page()
 

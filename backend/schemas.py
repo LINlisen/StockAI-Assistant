@@ -73,3 +73,12 @@ class UserUpdate(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     api_token: Optional[str] = None
+
+# 修改回測請求：加入 provider
+class BacktestRequest(BaseModel):
+    user_id: int
+    stock_id: str
+    initial_capital: float = 100000
+    api_key: Optional[str] = None # 如果選 Ollama，這個可以為空
+    provider: str = "gemini"     # "gemini" 或 "ollama"
+    model_name: str = "gemini-1.5-flash" # 或 "llama3", "mistral" 等

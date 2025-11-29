@@ -51,3 +51,18 @@ class AnalysisLog(Base):
 
     def __repr__(self):
         return f"<AnalysisLog(id={self.id}, stock={self.stock_id}, date={self.created_at})>"
+    
+class BacktestRecord(Base):
+    __tablename__ = "backtest_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    stock_id = Column(String, index=True)
+    strategy_name = Column(String)  # 例如 "AI_Gemini_Flash"
+    initial_capital = Column(Float)
+    
+    # 儲存完整的統計結果 (JSON 轉字串存入)
+    # 包含: final_balance, total_return, trades_list, equity_curve
+    result_data = Column(Text) 
+    
+    # 建立時間 (用來判斷快取是否過期，例如超過 1 天就重跑)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

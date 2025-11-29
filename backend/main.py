@@ -11,6 +11,7 @@ import models
 import schemas
 from services.stock_service import StockService
 from services.ai_service import AIService
+from services.backtest_service import BacktestService
 
 # 初始化 DB
 models.Base.metadata.create_all(bind=engine)
@@ -20,6 +21,7 @@ app = FastAPI()
 # 初始化 Service 實例
 stock_service = StockService()
 ai_service = AIService()
+backtest_service = BacktestService()
 
 # --- 工具函式：SHA256 加密 ---
 def hash_password(password: str) -> str:
@@ -171,3 +173,21 @@ def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Dep
     db.refresh(db_user)
     
     return db_user
+
+
+
+@app.post("/api/backtest")
+def run_backtest_api(req: schemas.BacktestRequest, db: Session = Depends(get_db)):
+    try:
+        result = backtest_service.run_backtest(
+            db=db,
+            api_key=req.api_key,
+            stock_id=req.stock_id,
+            initial_capital=req.initial_capital,
+            provider=req.provider,      # <--- 傳入
+            model_name=req.model_name   # <--- 傳入
+        )
+        return result
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail=str(e))
