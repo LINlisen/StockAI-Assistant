@@ -388,6 +388,18 @@ def backtest_page():
             # 這裡可以讓使用者自己輸入，或者寫死你有裝的模型
             model_name = st.text_input("Ollama 模型名稱", "llama3.2", help="請確保本地已執行 `ollama run <模型名>`")
             st.caption("⚠️ 須確保後端電腦已安裝 Ollama 並開啟服務 (port 11434)")
+        # 🔥 新增策略風格選擇
+        prompt_options = {
+            "balanced": "⚖️ 平衡型 (穩健)",
+            "aggressive": "🔥 激進型 (追高殺低)",
+            "conservative": "🛡️ 保守型 (只買跌深)",
+            "short_term": "⚡ 短線隔日沖"
+        }
+        
+        # 讓使用者選中文名稱，但我們後端只認英文 key
+        selected_label = st.selectbox("AI 操盤風格", list(prompt_options.values()))
+        # 反查回英文 key (例如 "aggressive")
+        prompt_style = [k for k, v in prompt_options.items() if v == selected_label][0]
 
     st.divider()
     
@@ -410,7 +422,8 @@ def backtest_page():
                     "initial_capital": capital,
                     "api_key": api_key,
                     "provider": provider_code,
-                    "model_name": model_name
+                    "model_name": model_name,
+                    "prompt_style": prompt_style
                 }
                 res = requests.post(f"{BACKEND_URL}/api/backtest", json=payload)
                 
@@ -438,21 +451,174 @@ def backtest_page():
                     st.subheader("📋 交易明細")
                     if data['trades']:
                         trades_df = pd.DataFrame(data['trades'])
+                        display_cols = [
+                            'entry_date', 'exit_date', 'type', 
+                            'entry_price', 'stop_loss', 'take_profit', 'exit_price', # 把 SL/TP 加在中間
+                            'profit', 'profit_pct', 'reason'
+                        ]
+                        
                         st.dataframe(
-                            trades_df[['entry_date', 'exit_date', 'type', 'entry_price', 'exit_price', 'profit', 'profit_pct', 'reason']],
+                            trades_df[display_cols],
                             column_config={
+                                "entry_date": "買入日期",
+                                "exit_date": "賣出日期",
+                                "type": "方向",
+                                "entry_price": st.column_config.NumberColumn("買入價", format="%.2f"),
+                                
+                                # 🔥 新增這兩欄的設定
+                                "stop_loss": st.column_config.NumberColumn("預設停損", format="%.2f"),
+                                "take_profit": st.column_config.NumberColumn("預設停利", format="%.2f"),
+                                
+                                "exit_price": st.column_config.NumberColumn("賣出價", format="%.2f"),
                                 "profit": st.column_config.NumberColumn("損益 (含稅)", format="$%d"),
                                 "profit_pct": st.column_config.NumberColumn("報酬率", format="%.2f%%"),
+                                "reason": "出場原因"
                             },
                             use_container_width=True
                         )
                     else:
                         st.info("這段期間 AI 選擇觀望，沒有進行任何交易。")
-
                 else:
                     st.error(f"回測失敗: {res.text}")
             except Exception as e:
                 st.error(f"連線錯誤: {e}")
+
+# ==========================================
+#  頁面 F: 回測儀表板 (新增)
+# ==========================================
+def backtest_dashboard_page():
+    stock_options = []
+    try:
+        res = requests.get(f"{BACKEND_URL}/api/backtest/stocks")
+        if res.status_code == 200:
+            stock_options = res.json()
+    except Exception as e:
+        st.error(f"無法取得股票清單: {e}")
+
+    # --- 2. 顯示下拉選單 ---
+    if not stock_options:
+        st.warning("⚠️ 目前資料庫中沒有任何回測紀錄，請先去「智能回測」頁面跑幾次。")
+        return
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        # 改用 selectbox，預設選第一個
+        target_stock = st.selectbox("選擇已回測的股票", stock_options)
+    
+    with col2:
+        # 其實 selectbox 選了就會變，按鈕可以當作「強制重新整理」
+        refresh_btn = st.button("🔄 重新載入", type="secondary")
+
+    # 使用 session_state 暫存該股票的詳細紀錄
+    # 當股票改變 (target_stock) 或 按下重新整理 (refresh_btn) 時，重新抓取資料
+    if "dashboard_stock" not in st.session_state:
+        st.session_state.dashboard_stock = ""
+
+    # 判斷是否需要重新抓取資料
+    should_fetch = (target_stock != st.session_state.dashboard_stock) or refresh_btn
+    
+    if should_fetch:
+        try:
+            params = {"stock_id": target_stock}
+            res = requests.get(f"{BACKEND_URL}/api/backtest/history", params=params)
+            
+            if res.status_code == 200:
+                st.session_state.history_data = res.json()
+                st.session_state.dashboard_stock = target_stock # 更新目前狀態
+            else:
+                st.error("無法取得詳細資料")
+        except Exception as e:
+            st.error(f"連線錯誤: {e}")
+
+    # --- 3. 顯示結果與比較 (這部分跟原本一樣，不用動) ---
+    records = st.session_state.get("history_data", [])
+    
+    if not records:
+        st.write("查無資料。")
+        return
+
+    st.divider()
+    st.subheader(f"找到 {len(records)} 筆紀錄 ({target_stock})，請勾選要比較的項目：")
+    
+    # 整理資料給表格顯示
+    table_data = []
+    for r in records:
+        # result_data 已經被 Pydantic 轉成 dict 了
+        res = r['result_data']
+        clean_strategy_name = r['strategy_name'].replace("Backtest_", "")
+        table_data.append({
+            "id": r['id'],
+            "strategy": clean_strategy_name, # 這裡會顯示 Backtest_gemini_... 或 Backtest_ollama_...
+            "return": res.get('total_return_pct', 0),
+            "final_equity": res.get('final_equity', 0),
+            "trades": res.get('trade_count', 0),
+            "date": pd.to_datetime(r['created_at']).strftime('%Y-%m-%d %H:%M'),
+            "raw_data": res # 暫存原始資料供繪圖用
+        })
+    
+    df_table = pd.DataFrame(table_data)
+    
+    # 使用 AgGrid 或簡單的 dataframe 加上 checkbox (這裡用 multiselect 比較簡單)
+    options = df_table.apply(lambda x: f"[{x['date']}] {x['strategy']} (報酬率: {x['return']}%)", axis=1).tolist()
+    
+    selected_indices = st.multiselect("選擇要 PK 的模型紀錄 (可多選)", options, default=options[:len(records)])
+    
+    if selected_indices:
+        # 找出使用者選了哪些 row
+        selected_rows = []
+        for opt in selected_indices:
+            # 反查原始資料
+            idx = options.index(opt)
+            selected_rows.append(df_table.iloc[idx])
+            
+        # --- 比較區塊 1: 績效長條圖 ---
+        st.subheader("🏆 績效 PK")
+        compare_df = pd.DataFrame(selected_rows)
+        
+        # 顯示比較表格
+        st.dataframe(
+            compare_df[['strategy', 'return', 'final_equity', 'trades', 'date']],
+            column_config={
+                "strategy": "使用模型",
+                "return": st.column_config.NumberColumn("報酬率 %", format="%.2f%%"),
+                "final_equity": st.column_config.NumberColumn("最終資產", format="$%d"),
+                "trades": "交易次數",
+                "date": "回測時間"
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+        
+        # 畫長條圖比較報酬率
+        st.bar_chart(compare_df, x="strategy", y="return", color="strategy")
+
+        # --- 比較區塊 2: 資產曲線疊加圖 ---
+        st.subheader("📈 資產成長曲線疊加")
+        
+        # 整理所有選中紀錄的 equity curve
+        combined_equity = pd.DataFrame()
+        
+        for index, row in compare_df.iterrows():
+            # 取出這筆紀錄的資產曲線
+            curve = row['raw_data']['equity_curve'] # list of dict
+            temp_df = pd.DataFrame(curve)
+            temp_df['date'] = pd.to_datetime(temp_df['date'])
+            temp_df.set_index('date', inplace=True)
+            
+            # 重新以此策略名稱命名 column
+            col_name = f"{row['strategy']} ({row['date']})"
+            temp_df.rename(columns={'equity': col_name}, inplace=True)
+            
+            # 合併到大表
+            if combined_equity.empty:
+                combined_equity = temp_df
+            else:
+                combined_equity = combined_equity.join(temp_df, how='outer')
+
+        # 填補空值 (forward fill) 避免線條斷掉
+        combined_equity.fillna(method='ffill', inplace=True)
+        
+        st.line_chart(combined_equity)
 # ==========================================
 #  主導航控制器 (Navigation)
 # ==========================================
@@ -462,7 +628,9 @@ def main_controller():
         st.write(f"👤 您好，**{st.session_state.user_info['username']}**")
         
         # 頁面切換選單
-        page = st.radio("前往頁面", ["📈 操盤分析", "🔍 智慧選股", "📜 歷史紀錄","🚀 模型回測" ,"👤 個人設定"])
+        page = st.radio("前往頁面", 
+            ["📈 操盤分析", "🔍 智慧選股", "🔙 智能回測", "📊 回測儀表板", "📜 歷史紀錄", "👤 個人設定"]
+        )
         
         st.divider()
         if st.button("登出"):
@@ -477,8 +645,10 @@ def main_controller():
          screener_page()
     elif page == "📜 歷史紀錄":  # <--- 新增路由
         history_page()
-    elif page == "🚀 模型回測":  # <--- 新增路由
+    elif page == "🔙 智能回測": # 原本的 backtest_page
         backtest_page()
+    elif page == "📊 回測儀表板": # <--- 新增
+        backtest_dashboard_page()
     elif page == "👤 個人設定":
         settings_page()
 

@@ -1,8 +1,7 @@
 # backend/schemas.py
-from pydantic import BaseModel
+from pydantic import BaseModel, Json
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-
 # --- 原有的 Stock 相關 schema 保持不變 ---
 class StockAnalysisRequest(BaseModel):
     user_id: int
@@ -82,3 +81,15 @@ class BacktestRequest(BaseModel):
     api_key: Optional[str] = None # 如果選 Ollama，這個可以為空
     provider: str = "gemini"     # "gemini" 或 "ollama"
     model_name: str = "gemini-1.5-flash" # 或 "llama3", "mistral" 等
+    prompt_style: str = "balanced"  # 預設為 "平衡型"
+
+class BacktestHistoryItem(BaseModel):
+    id: int
+    stock_id: str
+    strategy_name: str
+    initial_capital: float
+    result_data: Json[Any]  # 自動將 JSON 字串轉為 Python Dict
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

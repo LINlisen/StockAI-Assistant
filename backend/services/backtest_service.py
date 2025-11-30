@@ -1,5 +1,6 @@
 # backend/services/backtest_service.py
 import json
+from typing import Optional
 import pandas as pd
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
@@ -59,10 +60,10 @@ class BacktestService:
             return amount - fee - tax
 
     # 修改 run_backtest 簽章，接收 provider 和 model_name
-    def run_backtest(self, db: Session, api_key: str, stock_id: str, initial_capital: float, provider: str, model_name: str):
+    def run_backtest(self, db: Session, api_key: str, stock_id: str, initial_capital: float, provider: str, model_name: str, ollama_url: str = None, prompt_style: str = "balanced"):
         
         # 組合出唯一的策略名稱，例如 "Backtest_ollama_llama3" 或 "Backtest_gemini_gemini-1.5-flash"
-        strategy_key = f"Backtest_{provider}_{model_name}"
+        strategy_key = f"Backtest_{provider}_{model_name}_{prompt_style}"
 
         # 1. 檢查快取 (傳入新的 key)
         cached = self.get_cached_result(db, stock_id, initial_capital, strategy_key)
@@ -131,6 +132,8 @@ class BacktestService:
                         "type": "Long",
                         "entry_price": position['entry_price'],
                         "exit_price": exit_price,
+                        "stop_loss": position['stop_loss'],     # 當時設定的停損
+                        "take_profit": position['take_profit'], # 當時設定的停利
                         "shares": position['shares'],
                         "profit": int(profit),
                         "profit_pct": round(profit_pct, 2),
@@ -186,7 +189,7 @@ class BacktestService:
                     
                     # 呼叫 AI (這裡假設 ai_service 已經有 get_trade_signal 方法)
                     try:
-                        signal = self.ai_service.get_trade_signal(api_key, stock_id, summary['context_str'], provider=provider, model_name=model_name)
+                        signal = self.ai_service.get_trade_signal(api_key, stock_id, summary['context_str'], provider=provider, model_name=model_name, prompt_style=prompt_style)
                         
                         if signal.get('action') == "BUY":
                             # AI 建議買進 -> 建立掛單
@@ -225,3 +228,25 @@ class BacktestService:
         self.save_result(db, stock_id, initial_capital, result, strategy_key)
         
         return result
+    
+    def get_history(self, db: Session, stock_id: Optional[str] = None):
+        """
+        查詢回測歷史紀錄
+        """
+        query = db.query(models.BacktestRecord)
+        
+        if stock_id:
+            query = query.filter(models.BacktestRecord.stock_id == stock_id)
+            
+        # 依時間倒序排列，最新的在前面
+        return query.order_by(models.BacktestRecord.created_at.desc()).all()
+    
+    def get_tested_stocks(self, db: Session):
+        """
+        取得所有已經有回測紀錄的股票代號 (不重複)
+        """
+        # query(欄位).distinct() 用來去除重複值
+        results = db.query(models.BacktestRecord.stock_id).distinct().all()
+        
+        # results 會長得像 [('2330',), ('2454',)]，我們要把它轉成 ['2330', '2454']
+        return [r[0] for r in results]

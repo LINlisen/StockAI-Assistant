@@ -185,9 +185,22 @@ def run_backtest_api(req: schemas.BacktestRequest, db: Session = Depends(get_db)
             stock_id=req.stock_id,
             initial_capital=req.initial_capital,
             provider=req.provider,      # <--- 傳入
-            model_name=req.model_name   # <--- 傳入
+            model_name=req.model_name,   # <--- 傳入
+            prompt_style=req.prompt_style
         )
         return result
     except Exception as e:
         print(e)
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/api/backtest/history", response_model=List[schemas.BacktestHistoryItem])
+def get_backtest_history(stock_id: str = None, db: Session = Depends(get_db)):
+    # 如果前端有傳 stock_id 就篩選，沒有就回傳全部
+    return backtest_service.get_history(db, stock_id)
+
+@app.get("/api/backtest/stocks", response_model=List[str])
+def get_backtest_stock_list(db: Session = Depends(get_db)):
+    try:
+        return backtest_service.get_tested_stocks(db)
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

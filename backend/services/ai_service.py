@@ -4,6 +4,38 @@ import json
 import requests
 
 class AIService:
+    PROMPT_TEMPLATES = {
+        "balanced": """
+        你是一個「平衡型」的量化交易員。
+        策略重點：尋找趨勢確認的進場點，重視風險報酬比。
+        進場條件：均線多頭排列且回測支撐不破，或指標出現明確黃金交叉。
+        風險控管：停損設在關鍵支撐下方 2-3%。
+        """,
+        
+        "aggressive": """
+        你是一個「激進型」的動能交易員 (Momentum Trader)。
+        策略重點：追逐強勢股，只要有突破訊號就勇敢進場。
+        進場條件：爆量長紅、突破區間、RSI 強勢區鈍化。
+        風險控管：停損設在 5% 左右，願意承擔較大波動以換取飆漲段。
+        心態：寧可追高被套，不可錯過飆股。
+        """,
+        
+        "conservative": """
+        你是一個「極度保守」的價值投資與波段交易員。
+        策略重點：只在勝率極高時出手，寧可錯過也不要虧損。
+        進場條件：股價跌深至長期均線(年線)有撐，或乖離率過大出現超賣訊號(RSI < 20)。
+        風險控管：嚴格停損，只要跌破支撐立刻出場。
+        心態：保本第一，獲利第二。
+        """,
+        
+        "short_term": """
+        你是一個「隔日沖」主力思維的短線客。
+        策略重點：尋找今天收盤強勢，明天開盤可能會有慣性上漲的標的。
+        進場條件：尾盤急拉、主力籌碼集中。
+        風險控管：持有時間極短，設非常窄的停損停利。
+        """
+    }
+
     def __init__(self):
         pass
 
@@ -58,13 +90,16 @@ class AIService:
         except Exception as e:
             return f"AI 分析失敗: {str(e)}"
         
-    def get_trade_signal(self, api_key: str, stock_id: str, context_data: str, provider: str = "gemini", model_name: str = "gemini-1.5-flash"):
-        """
-        根據 provider 決定呼叫 Gemini 還是 Ollama
-        """
-        # 定義 Prompt (共用)
+    def get_trade_signal(self, api_key: str, stock_id: str, context_data: str, provider: str = "gemini", model_name: str = "gemini-1.5-flash", ollama_url: str = None, prompt_style: str = "balanced"):
+        # 1. 根據風格取得對應的 Persona 設定
+        # 如果找不到對應風格，就用預設 balanced
+        persona = self.PROMPT_TEMPLATES.get(prompt_style, self.PROMPT_TEMPLATES["balanced"])
+
+        # 2. 組合最終 System Prompt
         system_prompt = f"""
-        你是一個量化交易決策系統。請根據提供的股票數據進行分析。
+        {persona}
+        
+        請根據提供的股票數據進行分析。
         股票代號: {stock_id}
         數據摘要: {context_data}
 
@@ -79,14 +114,15 @@ class AIService:
             "entry_price": 100.5,
             "stop_loss": 95.0,
             "take_profit": 110.0,
-            "reason": "突破均線糾結"
+            "reason": "依據激進策略，突破前高進場"
         }}
         """
 
         if provider == "ollama":
-            return self._call_ollama(model_name, system_prompt)
+            return self._call_ollama(model_name, system_prompt, ollama_url)
         else:
             return self._call_gemini(api_key, model_name, system_prompt)
+
 
     def _call_gemini(self, api_key, model_name, prompt):
         try:
@@ -111,31 +147,37 @@ class AIService:
             print(f"Gemini Error: {e}")
             return {"action": "HOLD", "reason": f"Gemini 錯誤: {str(e)}"}
 
-    def _call_ollama(self, model_name, prompt):
+    def _call_ollama(self, model_name, prompt, custom_url=None):
         """
-        呼叫本地 Ollama API (預設 port 11434)
+        呼叫本地 Ollama API
         """
         try:
-            url = "http://localhost:11434/api/chat"
+            # 如果有傳入 custom_url (Ngrok網址)，就用它；否則用 localhost
+            base_url = custom_url if custom_url else "http://localhost:11434"
+            # 確保網址結尾沒有斜線，避免變成 //api/chat
+            base_url = base_url.rstrip("/")
+            
+            url = f"{base_url}/api/chat"
+            
             payload = {
                 "model": model_name,
                 "messages": [
                     {"role": "user", "content": prompt}
                 ],
                 "stream": False,
-                "format": "json" # Ollama 支援強制 JSON 模式 (需較新版本)
+                "format": "json"
             }
             
+            # 設定 timeout，避免等太久
             response = requests.post(url, json=payload, timeout=120)
             
             if response.status_code == 200:
                 result = response.json()
                 content = result.get("message", {}).get("content", "{}")
-                print(f"🤖 AI Raw Response: {content}") 
                 return json.loads(content)
             else:
                 return {"action": "HOLD", "reason": f"Ollama HTTP {response.status_code}"}
                 
         except Exception as e:
             print(f"Ollama Error: {e}")
-            return {"action": "HOLD", "reason": "Ollama 連線失敗，請確認是否已啟動 (ollama serve)"}
+            return {"action": "HOLD", "reason": "Ollama 連線失敗或逾時"}
