@@ -4,12 +4,14 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 # --- 原有的 Stock 相關 schema 保持不變 ---
 class StockAnalysisRequest(BaseModel):
-    user_id: int
+    user_id: Optional[int] = None # 保持相容性，設為 Optional
     stock_id: str
     mode: str
     cost: float
-    api_key: str
-    model_name: str = "models/gemini-1.5-flash"  # 設定預設值
+    api_key: Optional[str] = None
+    provider: str = "gemini" 
+    model_name: str = "gemini-1.5-flash"
+    ollama_url: Optional[str] = None
     
 class AnalysisLogResponse(BaseModel):
     id: int

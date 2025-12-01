@@ -3,6 +3,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import mplfinance as mpf
+import time
 
 # 使用 try-except 包起來
 try:
@@ -142,81 +143,130 @@ def analysis_page():
     
     user = st.session_state.user_info
     
-    # --- 自動帶入 API Key 的邏輯 ---
-    # 從 session 取出 db 存的 token
+    # 從 session 取出 db 存的 token (作為預設值)
     saved_token = user.get("api_token") or ""
 
-# 側邊欄
+    # --- 側邊欄設定 ---
     with st.sidebar:
         st.header("⚙️ 參數設定")
         
-        # 1. API Key 輸入
-        api_key_input = st.text_input(
-            "Gemini API Key", 
-            value=saved_token, 
-            type="password"
-        )
+        # 1. 選擇 AI 提供者
+        ai_provider = st.radio("AI 模型來源", ["Google Gemini (雲端)", "Ollama (本地)"])
+        provider_code = "gemini" if "Gemini" in ai_provider else "ollama"
         
-        # 2. 模型選擇邏輯
-        # 為了避免每次畫面刷新都去敲後端 API，我們用 session_state 存起來
-        if "model_list" not in st.session_state:
-            st.session_state.model_list = ["models/gemini-2.0-flash"] # 預設值
+        # 初始化變數
+        ollama_url = None
+        api_key_input = None
+        selected_model = "models/gemini-2.0-flash" # 預設值
 
-        # 當有 API Key 且按下重新整理按鈕，或是剛載入時嘗試獲取
-        col_m1, col_m2 = st.columns([4, 1])
-        if col_m2.button("🔄", help="更新模型列表"):
-            if api_key_input:
-                try:
-                    res = requests.post(f"{BACKEND_URL}/api/models", json={"api_key": api_key_input})
-                    if res.status_code == 200:
-                        st.session_state.model_list = res.json()
-                        st.success("已更新")
-                except:
-                    st.warning("無法連線")
-        
-        # 下拉選單
-        selected_model = col_m1.selectbox("選擇 AI 模型", st.session_state.model_list, index=0)
+        # --- 情境 A: 使用 Google Gemini ---
+        if provider_code == "gemini":
+            # API Key 輸入
+            api_key_input = st.text_input(
+                "Gemini API Key", 
+                value=saved_token, 
+                type="password"
+            )
+            
+            # --- Gemini 模型列表動態獲取邏輯 (保留你原本的功能) ---
+            if "model_list" not in st.session_state:
+                st.session_state.model_list = ["models/gemini-2.0-flash", "models/gemini-1.5-flash"] # 預設列表
+
+            # 更新按鈕與選單
+            col_m1, col_m2 = st.columns([4, 1])
+            
+            # 🔄 更新按鈕
+            if col_m2.button("🔄", help="更新模型列表"):
+                if api_key_input:
+                    try:
+                        with st.spinner("更新中..."):
+                            res = requests.post(f"{BACKEND_URL}/api/models", json={"api_key": api_key_input})
+                            if res.status_code == 200:
+                                st.session_state.model_list = res.json()
+                                st.success("已更新")
+                            else:
+                                st.warning("更新失敗")
+                    except:
+                        st.warning("無法連線後端")
+            
+            # 模型選擇選單
+            selected_model = col_m1.selectbox("選擇 AI 模型", st.session_state.model_list, index=0)
+
+        # --- 情境 B: 使用 Ollama (本地/自建) ---
+        else:
+            api_key_input = "ollama_no_key" # Ollama 不需要 Key，但後端需佔位符
+            
+            # Ollama 模型選擇 (包含你指定的 gemma3 與 oss)
+            # 你也可以開放讓使用者自己輸入
+            ollama_models = ["gemma3:12b", "gpt-oss:20b", "llama3.2:latest"]
+            
+            selected_model = st.selectbox(
+                "選擇 Ollama 模型", 
+                ollama_models,
+                help="請確保後端電腦已執行 `ollama pull <模型名>`"
+            )
+            
+            # Ollama URL (支援雲端 Ngrok)
+            ollama_url = st.text_input(
+                "Ollama URL", 
+                value="http://localhost:11434",
+                help="若是雲端部署，請填入 Ngrok 網址"
+            )
 
         st.divider()
 
+        # --- 通用參數 ---
         stock_id = st.text_input("股票代號", "2330")
-        mode = st.selectbox("操作方向", ["做多", "做空"])
+        
+        # 這裡建議加上英文 mapping，因為後端通常習慣判斷 "Long"/"Short"
+        mode_display = st.selectbox("操作方向", ["做多 (Long)", "做空 (Short)"])
+        mode = "Long" if "Long" in mode_display else "Short"
+        
         cost = st.number_input("成本", 0.0)
         run_btn = st.button("🚀 開始分析", type="primary")
 
-
+    # --- 執行按鈕邏輯 ---
     if run_btn:
-        if not api_key_input:
+        # 檢查 Gemini Key
+        if provider_code == "gemini" and not api_key_input:
             st.error("請輸入 API Key")
             return
             
-        with st.spinner(f"正在呼叫 {selected_model} 進行分析..."):
+        with st.spinner(f"正在呼叫 {selected_model} ({provider_code}) 進行分析..."):
             try:
                 payload = {
-                    "user_id": user['id'],
+                    "user_id": user.get('id'),
                     "stock_id": stock_id,
                     "mode": mode,
                     "cost": cost,
                     "api_key": api_key_input,
-                    "model_name": selected_model  # <--- 將選到的模型傳給後端
+                    
+                    # 🔥 關鍵參數：傳送 provider, model_name, ollama_url
+                    "provider": provider_code,
+                    "model_name": selected_model,
+                    "ollama_url": ollama_url
                 }
+                
                 res = requests.post(f"{BACKEND_URL}/api/analyze", json=payload)
                 
                 if res.status_code == 200:
                     data = res.json()
-                    # ... (後面的顯示邏輯不變) ...
+                    
+                    # --- 顯示結果 ---
                     col1, col2 = st.columns(2)
                     col1.metric("現價", f"{data['current_price']:.2f}")
                     col1.metric("趨勢", data['trend'])
                     
-                    st.subheader(f"🧠 AI 分析報告 ({selected_model})") # 標題顯示使用的模型
+                    st.subheader(f"🧠 AI 分析報告 ({selected_model})")
                     st.info(data['ai_analysis'])
                     
-                    raw = data['technical_data']
-                    df = pd.DataFrame(raw)
-                    df['Date'] = pd.to_datetime(df['Date'])
-                    df.set_index('Date', inplace=True)
-                    st.line_chart(df['Close'])
+                    # 繪圖
+                    if data.get('technical_data'):
+                        raw = data['technical_data']
+                        df = pd.DataFrame(raw)
+                        df['Date'] = pd.to_datetime(df['Date'])
+                        df.set_index('Date', inplace=True)
+                        st.line_chart(df['Close'])
                 else:
                     st.error(f"分析失敗: {res.text}")
             except Exception as e:
@@ -619,6 +669,174 @@ def backtest_dashboard_page():
         combined_equity.fillna(method='ffill', inplace=True)
         
         st.line_chart(combined_equity)
+
+# ==========================================
+#  頁面 G: 自動化全策略回測 (新增)
+# ==========================================
+def auto_backtest_page():
+    st.title("🤖 自動化策略矩陣回測")
+    st.info("💡 系統將自動遍歷 [3種模型] x [4種策略] 共 12 次回測，並比較績效。")
+    
+    user = st.session_state.user_info
+
+    # 1. 設定區
+    c1, c2 = st.columns(2)
+    with c1:
+        stock_id = st.text_input("回測股票代號", "2330")
+    with c2:
+        capital = st.number_input("初始資金", value=100000, step=10000)
+
+    # 設定要跑的模型與策略
+    # 注意：這些模型必須已經在你的 Ollama 裡面 (ollama pull xxx)
+    target_models = [
+        "llama3.2:latest", 
+        "gpt-oss:20b",    # 請確認 Ollama 有此模型 (或者是 user 自訂的名稱)
+        "gemma3:12b"      # 請確認 Ollama 有此模型 (Gemma 2 較常見，Gemma 3 尚未發布，此處依你需求填寫)
+    ]
+    
+    target_strategies = {
+        "balanced": "⚖️ 平衡型",
+        "aggressive": "🔥 激進型",
+        "conservative": "🛡️ 保守型",
+        "short_term": "⚡ 短線隔日沖"
+    }
+
+    # Ollama URL 設定
+    with st.expander("進階設定 (Ollama URL)"):
+        ollama_url = st.text_input(
+            "Ollama URL", 
+            value="http://localhost:11434",
+            help="如果是雲端部署，請填入 Ngrok 網址"
+        )
+
+    # 2. 執行區
+    if st.button("🚀 啟動自動掃描", type="primary"):
+        # 初始化 UI 元件
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        timer_text = st.empty()
+        result_area = st.container()
+        
+        # 計算總任務數
+        total_tasks = len(target_models) * len(target_strategies)
+        completed_tasks = 0
+        start_time = time.time()
+        
+        all_results = []
+        
+        # 開始雙重迴圈
+        for model in target_models:
+            for style_key, style_label in target_strategies.items():
+                
+                # --- A. 更新狀態顯示 ---
+                current_task_name = f"正在執行: {model} / {style_label} ..."
+                status_text.markdown(f"**{current_task_name}**")
+                
+                # --- B. 呼叫後端 API ---
+                task_start = time.time()
+                try:
+                    payload = {
+                        "user_id": user['id'],
+                        "stock_id": stock_id,
+                        "initial_capital": capital,
+                        "api_key": "ollama_no_key", # 本地模型不需要 Key
+                        "provider": "ollama",
+                        "model_name": model,
+                        "ollama_url": ollama_url,
+                        "prompt_style": style_key
+                    }
+                    
+                    # 發送請求
+                    res = requests.post(f"{BACKEND_URL}/api/backtest", json=payload)
+                    
+                    if res.status_code == 200:
+                        data = res.json()
+                        # 整理簡單結果存起來
+                        all_results.append({
+                            "Model": model,
+                            "Strategy": style_label,
+                            "Return %": data.get('total_return_pct', 0),
+                            "Final Equity": data.get('final_equity', 0),
+                            "Trades": data.get('trade_count', 0),
+                            "raw_data": data # 存下來等等畫圖用
+                        })
+                    else:
+                        st.error(f"❌ {model} 執行失敗: {res.text}")
+                        
+                except Exception as e:
+                    st.error(f"❌ 連線錯誤: {e}")
+
+                # --- C. 計算時間與更新進度 ---
+                task_end = time.time()
+                completed_tasks += 1
+                
+                # 計算進度 %
+                progress = completed_tasks / total_tasks
+                progress_bar.progress(progress)
+                
+                # 計算剩餘時間 (Simple Moving Average)
+                elapsed_total = task_end - start_time
+                avg_time_per_task = elapsed_total / completed_tasks
+                remaining_tasks = total_tasks - completed_tasks
+                eta_seconds = int(avg_time_per_task * remaining_tasks)
+                
+                # 格式化時間 (MM:SS)
+                eta_str = f"{eta_seconds // 60:02d}:{eta_seconds % 60:02d}"
+                elapsed_str = f"{int(elapsed_total) // 60:02d}:{int(elapsed_total) % 60:02d}"
+                
+                timer_text.info(f"⏳ 已用時間: {elapsed_str} | 預計剩餘時間: {eta_str} | 進度: {completed_tasks}/{total_tasks}")
+
+        # 3. 掃描完成，顯示結果
+        status_text.success("✅ 所有策略掃描完成！")
+        timer_text.empty() # 清除計時器
+        
+        if all_results:
+            df_res = pd.DataFrame(all_results)
+            
+            # --- 排行榜 ---
+            st.subheader("🏆 績效排行榜")
+            # 依照報酬率排序
+            df_sorted = df_res.sort_values(by="Return %", ascending=False).reset_index(drop=True)
+            
+            # 標示出冠軍
+            best = df_sorted.iloc[0]
+            st.metric("最佳組合", f"{best['Model']} + {best['Strategy']}", f"{best['Return %']}%")
+            
+            st.dataframe(
+                df_sorted[['Model', 'Strategy', 'Return %', 'Final Equity', 'Trades']],
+                column_config={
+                    "Return %": st.column_config.NumberColumn(format="%.2f%%"),
+                    "Final Equity": st.column_config.NumberColumn(format="$%d"),
+                },
+                use_container_width=True
+            )
+
+            # --- 視覺化比較 ---
+            st.subheader("📊 績效熱力比較")
+            # 畫一個長條圖比較
+            # 為了讓圖表好看，組合一個名稱
+            df_res['Combo'] = df_res['Model'] + " | " + df_res['Strategy']
+            st.bar_chart(df_res, x='Combo', y='Return %', color='Strategy')
+            
+            # --- 資產曲線疊加 (選用) ---
+            with st.expander("📈 查看資產曲線疊加圖"):
+                combined_equity = pd.DataFrame()
+                for item in all_results:
+                    curve = item['raw_data']['equity_curve']
+                    temp_df = pd.DataFrame(curve)
+                    temp_df['date'] = pd.to_datetime(temp_df['date'])
+                    temp_df.set_index('date', inplace=True)
+                    
+                    col_name = f"{item['Model']}-{item['Strategy']}"
+                    temp_df.rename(columns={'equity': col_name}, inplace=True)
+                    
+                    if combined_equity.empty:
+                        combined_equity = temp_df
+                    else:
+                        combined_equity = combined_equity.join(temp_df, how='outer')
+                
+                combined_equity.fillna(method='ffill', inplace=True)
+                st.line_chart(combined_equity)
 # ==========================================
 #  主導航控制器 (Navigation)
 # ==========================================
@@ -629,7 +847,7 @@ def main_controller():
         
         # 頁面切換選單
         page = st.radio("前往頁面", 
-            ["📈 操盤分析", "🔍 智慧選股", "🔙 智能回測", "📊 回測儀表板", "📜 歷史紀錄", "👤 個人設定"]
+            ["📈 操盤分析", "🔍 智慧選股", "🔙 智能回測", "🤖 自動化回測", "📊 回測儀表板", "📜 歷史紀錄", "👤 個人設定"]
         )
         
         st.divider()
@@ -647,6 +865,8 @@ def main_controller():
         history_page()
     elif page == "🔙 智能回測": # 原本的 backtest_page
         backtest_page()
+    elif page == "🤖 自動化回測": # <--- 新增路由
+        auto_backtest_page()
     elif page == "📊 回測儀表板": # <--- 新增
         backtest_dashboard_page()
     elif page == "👤 個人設定":

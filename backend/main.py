@@ -89,7 +89,9 @@ def analyze_stock(req: schemas.StockAnalysisRequest, db: Session = Depends(get_d
             mode=req.mode,
             cost=req.cost,
             context_data=summary["context_str"],
-            model_name=req.model_name
+            provider=req.provider,     
+            model_name=req.model_name,  
+            ollama_url=req.ollama_url 
         )
 
         # 4. 存入資料庫 (PostgreSQL)

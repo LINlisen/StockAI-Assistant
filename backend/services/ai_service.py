@@ -58,18 +58,11 @@ class AIService:
            print(f"Fetch models error: {e}")
            return []
 
-    def get_analysis(self, api_key: str, stock_id: str, mode: str, cost: float, context_data: str, model_name: str):
+    def get_analysis(self, api_key: str, stock_id: str, mode: str, cost: float, context_data: str, provider: str = "gemini", model_name: str = "gemini-1.5-flash", ollama_url: str = None):
         """
         呼叫 Gemini API 進行分析
         """
         try:
-            genai.configure(api_key=api_key)
-            
-            # 自動選擇模型邏輯
-            model = genai.GenerativeModel(model_name)
-            
-            # 如果要更嚴謹可以加入原本的 find_best_model 邏輯，這裡簡化直接指定
-            model = genai.GenerativeModel(model_name)
 
             prompt = f"""
             你是一位資深台股操盤手，並且能夠提供明確且果斷的判斷。請分析以下股票數據。
@@ -83,9 +76,21 @@ class AIService:
             4. 是否適合作為隔日沖的標的。
             5. 根據分析結果給出 (1) 進場價格 (2) 停利價格 (3) 停損價格
             """
-            
-            response = model.generate_content(prompt)
-            return response.text
+
+            if provider == "ollama":
+            # 呼叫 Ollama，json_mode=False (我們要文字報告)
+                return self._call_ollama(model_name, prompt, ollama_url, json_mode=False)
+            else:
+                # 呼叫 Gemini
+                if not api_key:
+                    return "⚠️ 請輸入 Gemini API Key"
+                try:
+                    genai.configure(api_key=api_key)
+                    model = genai.GenerativeModel(model_name)
+                    response = model.generate_content(prompt)
+                    return response.text
+                except Exception as e:
+                    return f"Gemini Error: {e}"
             
         except Exception as e:
             return f"AI 分析失敗: {str(e)}"
@@ -119,7 +124,7 @@ class AIService:
         """
 
         if provider == "ollama":
-            return self._call_ollama(model_name, system_prompt, ollama_url)
+            return self._call_ollama(model_name, system_prompt, ollama_url, json_mode=True)
         else:
             return self._call_gemini(api_key, model_name, system_prompt)
 
@@ -147,7 +152,7 @@ class AIService:
             print(f"Gemini Error: {e}")
             return {"action": "HOLD", "reason": f"Gemini 錯誤: {str(e)}"}
 
-    def _call_ollama(self, model_name, prompt, custom_url=None):
+    def _call_ollama(self, model_name, prompt, custom_url=None, json_mode=False):
         """
         呼叫本地 Ollama API
         """
@@ -161,12 +166,18 @@ class AIService:
             
             payload = {
                 "model": model_name,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
+                "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
-                "format": "json"
+                "options": {
+                    "num_predict": 2048,  # 強制讓它最多可以生成 2048 個 token (避免話講一半被切掉)
+                    "temperature": 0.7,   # 0.7 比較有創意，0.1 比較死板
+                    "top_p": 0.9
+                }
             }
+            
+            # 只有在回測功能 (json_mode=True) 時才強制 JSON
+            if json_mode:
+                payload["format"] = "json"
             
             # 設定 timeout，避免等太久
             response = requests.post(url, json=payload, timeout=120)
@@ -174,7 +185,10 @@ class AIService:
             if response.status_code == 200:
                 result = response.json()
                 content = result.get("message", {}).get("content", "{}")
-                return json.loads(content)
+                if json_mode:
+                    return json.loads(content)
+                else:
+                    return content # 直接回傳文字
             else:
                 return {"action": "HOLD", "reason": f"Ollama HTTP {response.status_code}"}
                 
