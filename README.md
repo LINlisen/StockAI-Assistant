@@ -49,7 +49,8 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. 環境設定 (.env)
+### 3. 環境設定 (.env) 
+(目前沒有SQLITE，要自己建一下PG，請在專案根目錄建立 .env 檔案)
 
 在專案根目錄建立 `.env` 檔案，並設定以下變數 (若使用預設 SQLite 可跳過資料庫設定)：
 
