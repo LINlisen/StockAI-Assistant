@@ -70,7 +70,8 @@ pip install -r requirements.txt
 開啟一個終端機視窗，執行：
 
 ```bash
-uvicorn backend.main:app --reload
+cd backend
+uvicorn main:app --reload
 ```
 *   後端預設執行於: `http://127.0.0.1:8000`
 *   API 文件 (Swagger UI): `http://127.0.0.1:8000/docs`
@@ -80,7 +81,8 @@ uvicorn backend.main:app --reload
 開啟另一個終端機視窗，執行：
 
 ```bash
-streamlit run frontend/app.py
+cd frontend
+streamlit run app.py
 ```
 *   前端預設執行於: `http://localhost:8501`
 
