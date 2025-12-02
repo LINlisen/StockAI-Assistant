@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres:
+    #build: ./db/.
+    #image: taipower/custom-postgres:1.0 
+    image: postgres:13
+    shm_size: 1G
+    container_name: postgres-container-custom-stockai
+    deploy:
+      resources:
+        limits:
+          memory: 8GB
+    environment:
+      POSTGRES_USER: stockai
+      POSTGRES_PASSWORD: stockai
+      POSTGRES_DB: stockai_db
+      POSTGRES_SSLMODE: prefer
+      #POSTGRES_INITDB_ARGS: "--data-checksums -E UTF8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8 -w -c work_mem=6GB -c shared_buffers=8GB"
+    ports:
+      - 5432:5432
+    networks:
+      - mynetwork
+    #volumes:
+      # - ./postgres_data:/var/lib/postgresql/data
+      # - ./CREATE_TABLE.sql:/docker-entrypoint-initdb.d/CREATE_TABLE.sql
+      # - ./db/postgresql.conf:/var/lib/postgresql/data/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stockai} -d ${POSTGRES_DB:-stockai_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  mynetwork:
+    driver: bridge
