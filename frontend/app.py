@@ -268,6 +268,10 @@ def analysis_page():
                     st.subheader(f"🧠 AI 分析報告 ({selected_model})")
                     st.info(data['ai_analysis'])
                     
+                    # 🔗 Yahoo Finance 連結
+                    yahoo_url = f"https://tw.stock.yahoo.com/quote/{stock_id}.TW/technical-analysis"
+                    st.markdown(f"📊 [查看 Yahoo Finance 技術分析]({yahoo_url})")
+                    
                     # 繪圖
                     if data.get('technical_data'):
                         raw = data['technical_data']
@@ -393,13 +397,22 @@ def screener_page():
                     # 把 list 轉成字串比較好顯示
                     df_res['matched_strategies'] = df_res['matched_strategies'].apply(lambda x: ", ".join(x))
                     
+                    # 🔗 新增 Yahoo Finance 技術分析頁面連結
+                    df_res['yahoo_url'] = df_res['stock_id'].apply(
+                        lambda x: f"https://tw.stock.yahoo.com/quote/{x}.TW/technical-analysis"
+                    )
+                    
                     st.dataframe(
                         df_res,
                         column_config={
-                            "stock_id": "股票代號",
+                            "yahoo_url": st.column_config.LinkColumn(
+                                "技術分析",
+                                help="點擊開啟 Yahoo 技術分析"
+                            ),
                             "name": "名稱",
                             "close": "收盤價",
-                            "matched_strategies": "符合條件"
+                            "matched_strategies": "符合條件",
+                            "stock_id": None  # 隱藏原始股票代號欄位
                         },
                         use_container_width=True,
                         hide_index=True
