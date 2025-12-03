@@ -62,7 +62,7 @@ class AIService:
         """
         try:
             # 1. 取得對應的人格設定 (若找不到則預設用 standard)
-            persona = self.ANALYSIS_TEMPLATES.get(prompt_style, self.ANALYSIS_TEMPLATES["standard"])
+            persona = self.PROMPT_TEMPLATES.get(prompt_style, self.PROMPT_TEMPLATES["standard"])
 
             # 2. 組合完整的 Prompt (人格 + 數據 + 任務)
             prompt = f"""

@@ -214,7 +214,14 @@ def analysis_page():
             )
 
         st.divider()
-
+        style_options = {
+            "standard": "🧑‍💼 標準 (資深操盤手)",
+            "balanced": "⚖️ 平衡型 (穩健)",
+            "aggressive": "🔥 激進型 (動能交易)",
+            "conservative": "🛡️ 保守型 (價值波段)"
+        }
+        selected_style_label = st.selectbox("分析風格", list(style_options.values()))
+        prompt_style = [k for k, v in style_options.items() if v == selected_style_label][0]
         # --- 通用參數 ---
         stock_id = st.text_input("股票代號", "2330")
         
@@ -244,7 +251,8 @@ def analysis_page():
                     # 🔥 關鍵參數：傳送 provider, model_name, ollama_url
                     "provider": provider_code,
                     "model_name": selected_model,
-                    "ollama_url": ollama_url
+                    "ollama_url": ollama_url,
+                    "prompt_style": prompt_style
                 }
                 
                 res = requests.post(f"{BACKEND_URL}/api/analyze", json=payload)
