@@ -5,6 +5,11 @@ import requests
 
 class AIService:
     PROMPT_TEMPLATES = {
+        "standard": """
+        你是一位資深台股操盤手，並且能夠提供明確且果斷的判斷。
+        風格：綜合技術面與籌碼面，給出最客觀的操作建議。
+        """,
+
         "balanced": """
         你是一個「平衡型」的量化交易員。
         策略重點：尋找趨勢確認的進場點，重視風險報酬比。
@@ -26,13 +31,6 @@ class AIService:
         進場條件：股價跌深至長期均線(年線)有撐，或乖離率過大出現超賣訊號(RSI < 20)。
         風險控管：嚴格停損，只要跌破支撐立刻出場。
         心態：保本第一，獲利第二。
-        """,
-        
-        "short_term": """
-        你是一個「隔日沖」主力思維的短線客。
-        策略重點：尋找今天收盤強勢，明天開盤可能會有慣性上漲的標的。
-        進場條件：尾盤急拉、主力籌碼集中。
-        風險控管：持有時間極短，設非常窄的停損停利。
         """
     }
 
@@ -58,14 +56,19 @@ class AIService:
            print(f"Fetch models error: {e}")
            return []
 
-    def get_analysis(self, api_key: str, stock_id: str, mode: str, cost: float, context_data: str, provider: str = "gemini", model_name: str = "gemini-1.5-flash", ollama_url: str = None):
+    def get_analysis(self, api_key: str, stock_id: str, mode: str, cost: float, context_data: str, provider: str = "gemini", model_name: str = "gemini-1.5-flash", ollama_url: str = None, prompt_style: str = "standard"):
         """
-        呼叫 Gemini API 進行分析
+        呼叫 AI 進行操盤分析 (回傳文字報告)
         """
         try:
+            # 1. 取得對應的人格設定 (若找不到則預設用 standard)
+            persona = self.ANALYSIS_TEMPLATES.get(prompt_style, self.ANALYSIS_TEMPLATES["standard"])
 
+            # 2. 組合完整的 Prompt (人格 + 數據 + 任務)
             prompt = f"""
-            你是一位資深台股操盤手，並且能夠提供明確且果斷的判斷。請分析以下股票數據。
+            {persona}
+
+            請分析以下股票數據。
             參數: 代號 {stock_id}, 方向 {mode}, 成本 {cost}
             數據: {context_data}
             
@@ -75,7 +78,10 @@ class AIService:
             3. 使用條列式，口語化，500字內。
             4. 是否適合作為隔日沖的標的。
             5. 根據分析結果給出 (1) 進場價格 (2) 停利價格 (3) 停損價格
+            
+            ⚠️ 重要：請直接輸出純文字報告，不要使用 JSON 格式。
             """
+
 
             if provider == "ollama":
             # 呼叫 Ollama，json_mode=False (我們要文字報告)

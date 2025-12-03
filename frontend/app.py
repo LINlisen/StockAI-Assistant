@@ -442,8 +442,7 @@ def backtest_page():
         prompt_options = {
             "balanced": "⚖️ 平衡型 (穩健)",
             "aggressive": "🔥 激進型 (追高殺低)",
-            "conservative": "🛡️ 保守型 (只買跌深)",
-            "short_term": "⚡ 短線隔日沖"
+            "conservative": "🛡️ 保守型 (只買跌深)"
         }
         
         # 讓使用者選中文名稱，但我們後端只認英文 key
@@ -670,6 +669,51 @@ def backtest_dashboard_page():
         
         st.line_chart(combined_equity)
 
+        st.divider()
+        st.subheader("📋 詳細交易紀錄比較")
+
+        # compare_df 是上面已經整理好，使用者勾選要 PK 的那幾筆資料
+        # 我們直接遍歷它
+        for index, row in compare_df.iterrows():
+            
+            # 設定摺疊標題
+            expander_title = f"{row['strategy']} | {row['date']} | 報酬率: {row['return']}%"
+            
+            with st.expander(expander_title):
+                # 從 raw_data 取出交易列表
+                trades_list = row['raw_data'].get('trades', [])
+                
+                if trades_list:
+                    df_trades = pd.DataFrame(trades_list)
+                    
+                    # 定義欄位順序 (包含停損停利)
+                    # 使用 list comprehension 過濾掉舊資料可能沒有的欄位
+                    desired_cols = [
+                        'entry_date', 'exit_date', 'type', 
+                        'entry_price', 'stop_loss', 'take_profit', 'exit_price', 
+                        'profit', 'profit_pct', 'reason'
+                    ]
+                    final_cols = [c for c in desired_cols if c in df_trades.columns]
+
+                    st.dataframe(
+                        df_trades[final_cols],
+                        column_config={
+                            "entry_date": "買入日期",
+                            "exit_date": "賣出日期",
+                            "type": "方向",
+                            "entry_price": st.column_config.NumberColumn("買入價", format="%.2f"),
+                            "stop_loss": st.column_config.NumberColumn("停損", format="%.2f"),
+                            "take_profit": st.column_config.NumberColumn("停利", format="%.2f"),
+                            "exit_price": st.column_config.NumberColumn("賣出價", format="%.2f"),
+                            "profit": st.column_config.NumberColumn("損益", format="$%d"),
+                            "profit_pct": st.column_config.NumberColumn("報酬率", format="%.2f%%"),
+                            "reason": "出場理由"
+                        },
+                        use_container_width=True
+                    )
+                else:
+                    st.info("此策略在回測期間選擇觀望，沒有進行任何交易。")
+
 # ==========================================
 #  頁面 G: 自動化全策略回測 (新增)
 # ==========================================
@@ -689,16 +733,14 @@ def auto_backtest_page():
     # 設定要跑的模型與策略
     # 注意：這些模型必須已經在你的 Ollama 裡面 (ollama pull xxx)
     target_models = [
-        "llama3.2:latest", 
-        "gpt-oss:20b",    # 請確認 Ollama 有此模型 (或者是 user 自訂的名稱)
-        "gemma3:12b"      # 請確認 Ollama 有此模型 (Gemma 2 較常見，Gemma 3 尚未發布，此處依你需求填寫)
+        "gpt-oss:20b", 
+        "gemma3:12b"     
     ]
     
     target_strategies = {
         "balanced": "⚖️ 平衡型",
         "aggressive": "🔥 激進型",
         "conservative": "🛡️ 保守型",
-        "short_term": "⚡ 短線隔日沖"
     }
 
     # Ollama URL 設定
@@ -837,6 +879,51 @@ def auto_backtest_page():
                 
                 combined_equity.fillna(method='ffill', inplace=True)
                 st.line_chart(combined_equity)
+            st.divider()
+            st.subheader("🔍 各組詳細交易明細")
+            
+            # 依照報酬率由高到低排序，讓表現最好的排前面
+            sorted_results = sorted(all_results, key=lambda x: x['Return %'], reverse=True)
+
+            for item in sorted_results:
+                # 設定摺疊選單的標題 (模型 + 策略 + 報酬率)
+                expander_label = f"🏆 {item['Model']} | {item['Strategy']} : 報酬率 {item['Return %']}% (交易 {item['Trades']} 次)"
+                
+                with st.expander(expander_label):
+                    # 取出原始交易資料
+                    trades_list = item['raw_data'].get('trades', [])
+                    
+                    if trades_list:
+                        df_trades = pd.DataFrame(trades_list)
+                        
+                        # 確保欄位存在 (避免有些舊資料沒有 stop_loss 導致報錯)
+                        # 定義我們想要顯示的順序
+                        desired_cols = [
+                            'entry_date', 'exit_date', 'type', 
+                            'entry_price', 'stop_loss', 'take_profit', 'exit_price', 
+                            'profit', 'profit_pct', 'reason'
+                        ]
+                        # 只選取 DataFrame 中實際存在的欄位
+                        final_cols = [c for c in desired_cols if c in df_trades.columns]
+
+                        st.dataframe(
+                            df_trades[final_cols],
+                            column_config={
+                                "entry_date": "買入日期",
+                                "exit_date": "賣出日期",
+                                "type": "方向",
+                                "entry_price": st.column_config.NumberColumn("買入價", format="%.2f"),
+                                "stop_loss": st.column_config.NumberColumn("停損", format="%.2f"),
+                                "take_profit": st.column_config.NumberColumn("停利", format="%.2f"),
+                                "exit_price": st.column_config.NumberColumn("賣出價", format="%.2f"),
+                                "profit": st.column_config.NumberColumn("損益", format="$%d"),
+                                "profit_pct": st.column_config.NumberColumn("報酬率", format="%.2f%%"),
+                                "reason": "出場理由"
+                            },
+                            use_container_width=True
+                        )
+                    else:
+                        st.info("此組合在回測期間選擇觀望，沒有進行任何交易。")
 # ==========================================
 #  主導航控制器 (Navigation)
 # ==========================================

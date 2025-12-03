@@ -12,7 +12,7 @@ class StockAnalysisRequest(BaseModel):
     provider: str = "gemini" 
     model_name: str = "gemini-1.5-flash"
     ollama_url: Optional[str] = None
-    
+    prompt_style: str = "standard"
 class AnalysisLogResponse(BaseModel):
     id: int
     stock_id: str
