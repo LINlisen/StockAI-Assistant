@@ -14,6 +14,12 @@ class StockService:
         "1326", "4904", "2603", "9910", "1590", "2317", "3017"
     ]
 
+    FINANCE_TICKERS = [
+        "2881", "2882", "2891", "2886", "2884", "2885", "2892", "2880", "2883", "2887", # 金控
+        "2890", "5880", "2888", "2889", "2838", "2834", "2801", "2812", "2809", "2845", # 銀行
+        "5876", "6005" # 證券
+    ]
+
     def __init__(self):
         pass
 
@@ -133,13 +139,29 @@ class StockService:
             
         return df
     
-    def screen_stocks(self, strategies: list) -> list:
+    def screen_stocks(self, strategies: list, scope: str = "TW50", custom_list: list = None) -> list:
         """
         執行選股主程式
+        :param strategies: 策略列表
+        :param scope: 掃描範圍 (TW50, Finance, Custom)
+        :param custom_list: 自訂股票代號列表 (當 scope=Custom 時使用)
         """
-        # 1. 下載數據
-        # 為了示範速度，這裡只抓 TW50，未來你可以改成讀取使用者自選股清單
-        stock_data = self.fetch_data_batch(self.TW50_TICKERS)
+        
+        # 1. 決定要掃描的股票清單
+        target_tickers = []
+        
+        if scope == "Custom":
+            if custom_list:
+                target_tickers = custom_list
+            else:
+                return [] # 沒給清單就回傳空
+        elif scope == "Finance":
+            target_tickers = self.FINANCE_TICKERS
+        else:
+            # 預設為 TW50
+            target_tickers = self.TW50_TICKERS
+
+        stock_data = self.fetch_data_batch(target_tickers)
         
         results = []
         
@@ -150,8 +172,8 @@ class StockService:
             if matched_strats:
                 results.append({
                     "stock_id": stock_id,
-                    "name": stock_id, 
-                    "close": round(df.iloc[-1]['Close'], 2),
+                    "name": stock_id, # 暫時用代號當名稱
+                    "close": float(df.iloc[-1]['Close']),
                     "matched_strategies": matched_strats
                 })
         

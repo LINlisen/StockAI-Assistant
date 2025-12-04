@@ -342,7 +342,45 @@ def history_page():
 # ==========================================
 def screener_page():
     st.title("🔍 智慧選股掃描")
-    st.info("💡 說明：系統將掃描「台灣 50」成分股，找出符合您勾選策略的股票。")
+    
+    # 1. 範圍設定區
+    st.subheader("1. 設定掃描範圍")
+    
+    # 選擇範圍
+    scope_option = st.radio(
+        "選擇股票池", 
+        ["🏆 台灣 50 (權值股)", "💰 金融股清單 (金控/銀行)", "📝 自訂清單"], 
+        horizontal=True
+    )
+    
+    # 處理 scope 參數與自訂輸入
+    scope_code = "TW50"
+    custom_tickers = []
+    
+    if "台灣 50" in scope_option:
+        scope_code = "TW50"
+        st.caption("掃描台股權值最大的 50 檔股票。")
+    elif "金融股" in scope_option:
+        scope_code = "Finance"
+        st.caption("掃描主要的金控與銀行股。")
+    else:
+        scope_code = "Custom"
+        # 顯示文字輸入框
+        user_input = st.text_area(
+            "輸入股票代號 (用逗號或空白分隔)", 
+            value="2330, 2454, 2603, 3034",
+            help="例如: 2330 2317 2454"
+        )
+        # 解析使用者輸入
+        if user_input:
+            # 將逗號、換行都取代為空白，然後切割
+            import re
+            raw_list = re.split(r'[,\s\n]+', user_input)
+            # 過濾空字串並去重
+            custom_tickers = list(set([x.strip() for x in raw_list if x.strip()]))
+            st.caption(f"目前共 {len(custom_tickers)} 檔股票待掃描。")
+
+    st.divider()
 
     # 策略選擇區
     st.subheader("1. 選擇策略條件")
@@ -368,6 +406,10 @@ def screener_page():
         if not selected_strategies:
             st.warning("請至少勾選一個策略！")
             return
+        
+        if scope_code == "Custom" and not custom_tickers:
+            st.error("請輸入自訂股票代號！")
+            return
 
         st.write("⏳ 正在掃描市場數據，請稍候 (約需 10-15 秒)...")
         progress_bar = st.progress(0)
@@ -376,7 +418,8 @@ def screener_page():
             # 呼叫後端 API
             payload = {
                 "strategies": selected_strategies,
-                "scope": "TW50"
+                "scope": scope_code,
+                "custom_tickers": custom_tickers if scope_code == "Custom" else []
             }
             # 假裝跑一下進度條讓使用者覺得有在動
             progress_bar.progress(30)
@@ -740,7 +783,7 @@ def backtest_dashboard_page():
 # ==========================================
 def auto_backtest_page():
     st.title("🤖 自動化策略矩陣回測")
-    st.info("💡 系統將自動遍歷 [3種模型] x [4種策略] 共 12 次回測，並比較績效。")
+    st.info("💡 系統將自動遍歷 [2種模型] x [4種策略] 共 12 次回測，並比較績效。")
     
     user = st.session_state.user_info
 
@@ -762,6 +805,7 @@ def auto_backtest_page():
         "balanced": "⚖️ 平衡型",
         "aggressive": "🔥 激進型",
         "conservative": "🛡️ 保守型",
+        "standard": "🧑‍💼 標準型",
     }
 
     # Ollama URL 設定

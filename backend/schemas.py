@@ -95,3 +95,9 @@ class BacktestHistoryItem(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ScreenRequest(BaseModel):
+    strategies: List[str] 
+    scope: str = "TW50"  # "TW50", "Finance", "Custom"
+    
+    custom_tickers: Optional[List[str]] = None
