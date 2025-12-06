@@ -91,7 +91,8 @@ def analyze_stock(req: schemas.StockAnalysisRequest, db: Session = Depends(get_d
             context_data=summary["context_str"],
             provider=req.provider,     
             model_name=req.model_name,  
-            ollama_url=req.ollama_url 
+            ollama_url=req.ollama_url,
+            prompt_style=req.prompt_style
         )
 
         # 4. 存入資料庫 (PostgreSQL)
@@ -131,11 +132,15 @@ def analyze_stock(req: schemas.StockAnalysisRequest, db: Session = Depends(get_d
 @app.post("/api/screen", response_model=List[schemas.ScreenResult])
 def screen_stocks(req: schemas.ScreenRequest, db: Session = Depends(get_db)):
     try:
-        # 如果使用者沒選任何策略，就預設全部檢查
-        target_strategies = req.strategies if req.strategies else ["MA_Cross_Major", "KD_Golden_Cross"]
+        # 如果使用者沒選任何策略，就預設跑 MA Cross
+        target_strategies = req.strategies if req.strategies else ["MA_Cross_Major"]
         
-        # 執行選股
-        results = stock_service.screen_stocks(target_strategies)
+        # 執行選股，傳入 scope 和 custom_tickers
+        results = stock_service.screen_stocks(
+            strategies=target_strategies, 
+            scope=req.scope, 
+            custom_list=req.custom_tickers
+        )
         
         return results
     except Exception as e:

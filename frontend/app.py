@@ -214,7 +214,14 @@ def analysis_page():
             )
 
         st.divider()
-
+        style_options = {
+            "standard": "🧑‍💼 標準 (資深操盤手)",
+            "balanced": "⚖️ 平衡型 (穩健)",
+            "aggressive": "🔥 激進型 (動能交易)",
+            "conservative": "🛡️ 保守型 (價值波段)"
+        }
+        selected_style_label = st.selectbox("分析風格", list(style_options.values()))
+        prompt_style = [k for k, v in style_options.items() if v == selected_style_label][0]
         # --- 通用參數 ---
         stock_id = st.text_input("股票代號", "2330")
         
@@ -244,7 +251,8 @@ def analysis_page():
                     # 🔥 關鍵參數：傳送 provider, model_name, ollama_url
                     "provider": provider_code,
                     "model_name": selected_model,
-                    "ollama_url": ollama_url
+                    "ollama_url": ollama_url,
+                    "prompt_style": prompt_style
                 }
                 
                 res = requests.post(f"{BACKEND_URL}/api/analyze", json=payload)
@@ -334,7 +342,45 @@ def history_page():
 # ==========================================
 def screener_page():
     st.title("🔍 智慧選股掃描")
-    st.info("💡 說明：系統將掃描「台灣 50」成分股，找出符合您勾選策略的股票。")
+    
+    # 1. 範圍設定區
+    st.subheader("1. 設定掃描範圍")
+    
+    # 選擇範圍
+    scope_option = st.radio(
+        "選擇股票池", 
+        ["🏆 台灣 50 (權值股)", "💰 金融股清單 (金控/銀行)", "📝 自訂清單"], 
+        horizontal=True
+    )
+    
+    # 處理 scope 參數與自訂輸入
+    scope_code = "TW50"
+    custom_tickers = []
+    
+    if "台灣 50" in scope_option:
+        scope_code = "TW50"
+        st.caption("掃描台股權值最大的 50 檔股票。")
+    elif "金融股" in scope_option:
+        scope_code = "Finance"
+        st.caption("掃描主要的金控與銀行股。")
+    else:
+        scope_code = "Custom"
+        # 顯示文字輸入框
+        user_input = st.text_area(
+            "輸入股票代號 (用逗號或空白分隔)", 
+            value="2330, 2454, 2603, 3034",
+            help="例如: 2330 2317 2454"
+        )
+        # 解析使用者輸入
+        if user_input:
+            # 將逗號、換行都取代為空白，然後切割
+            import re
+            raw_list = re.split(r'[,\s\n]+', user_input)
+            # 過濾空字串並去重
+            custom_tickers = list(set([x.strip() for x in raw_list if x.strip()]))
+            st.caption(f"目前共 {len(custom_tickers)} 檔股票待掃描。")
+
+    st.divider()
 
     # 策略選擇區
     st.subheader("1. 選擇策略條件")
@@ -360,6 +406,10 @@ def screener_page():
         if not selected_strategies:
             st.warning("請至少勾選一個策略！")
             return
+        
+        if scope_code == "Custom" and not custom_tickers:
+            st.error("請輸入自訂股票代號！")
+            return
 
         st.write("⏳ 正在掃描市場數據，請稍候 (約需 10-15 秒)...")
         progress_bar = st.progress(0)
@@ -368,7 +418,8 @@ def screener_page():
             # 呼叫後端 API
             payload = {
                 "strategies": selected_strategies,
-                "scope": "TW50"
+                "scope": scope_code,
+                "custom_tickers": custom_tickers if scope_code == "Custom" else []
             }
             # 假裝跑一下進度條讓使用者覺得有在動
             progress_bar.progress(30)
@@ -455,8 +506,7 @@ def backtest_page():
         prompt_options = {
             "balanced": "⚖️ 平衡型 (穩健)",
             "aggressive": "🔥 激進型 (追高殺低)",
-            "conservative": "🛡️ 保守型 (只買跌深)",
-            "short_term": "⚡ 短線隔日沖"
+            "conservative": "🛡️ 保守型 (只買跌深)"
         }
         
         # 讓使用者選中文名稱，但我們後端只認英文 key
@@ -683,12 +733,57 @@ def backtest_dashboard_page():
         
         st.line_chart(combined_equity)
 
+        st.divider()
+        st.subheader("📋 詳細交易紀錄比較")
+
+        # compare_df 是上面已經整理好，使用者勾選要 PK 的那幾筆資料
+        # 我們直接遍歷它
+        for index, row in compare_df.iterrows():
+            
+            # 設定摺疊標題
+            expander_title = f"{row['strategy']} | {row['date']} | 報酬率: {row['return']}%"
+            
+            with st.expander(expander_title):
+                # 從 raw_data 取出交易列表
+                trades_list = row['raw_data'].get('trades', [])
+                
+                if trades_list:
+                    df_trades = pd.DataFrame(trades_list)
+                    
+                    # 定義欄位順序 (包含停損停利)
+                    # 使用 list comprehension 過濾掉舊資料可能沒有的欄位
+                    desired_cols = [
+                        'entry_date', 'exit_date', 'type', 
+                        'entry_price', 'stop_loss', 'take_profit', 'exit_price', 
+                        'profit', 'profit_pct', 'reason'
+                    ]
+                    final_cols = [c for c in desired_cols if c in df_trades.columns]
+
+                    st.dataframe(
+                        df_trades[final_cols],
+                        column_config={
+                            "entry_date": "買入日期",
+                            "exit_date": "賣出日期",
+                            "type": "方向",
+                            "entry_price": st.column_config.NumberColumn("買入價", format="%.2f"),
+                            "stop_loss": st.column_config.NumberColumn("停損", format="%.2f"),
+                            "take_profit": st.column_config.NumberColumn("停利", format="%.2f"),
+                            "exit_price": st.column_config.NumberColumn("賣出價", format="%.2f"),
+                            "profit": st.column_config.NumberColumn("損益", format="$%d"),
+                            "profit_pct": st.column_config.NumberColumn("報酬率", format="%.2f%%"),
+                            "reason": "出場理由"
+                        },
+                        use_container_width=True
+                    )
+                else:
+                    st.info("此策略在回測期間選擇觀望，沒有進行任何交易。")
+
 # ==========================================
 #  頁面 G: 自動化全策略回測 (新增)
 # ==========================================
 def auto_backtest_page():
     st.title("🤖 自動化策略矩陣回測")
-    st.info("💡 系統將自動遍歷 [3種模型] x [4種策略] 共 12 次回測，並比較績效。")
+    st.info("💡 系統將自動遍歷 [2種模型] x [4種策略] 共 12 次回測，並比較績效。")
     
     user = st.session_state.user_info
 
@@ -702,16 +797,15 @@ def auto_backtest_page():
     # 設定要跑的模型與策略
     # 注意：這些模型必須已經在你的 Ollama 裡面 (ollama pull xxx)
     target_models = [
-        "llama3.2:latest", 
-        "gpt-oss:20b",    # 請確認 Ollama 有此模型 (或者是 user 自訂的名稱)
-        "gemma3:12b"      # 請確認 Ollama 有此模型 (Gemma 2 較常見，Gemma 3 尚未發布，此處依你需求填寫)
+        "gpt-oss:20b", 
+        "gemma3:12b"     
     ]
     
     target_strategies = {
         "balanced": "⚖️ 平衡型",
         "aggressive": "🔥 激進型",
         "conservative": "🛡️ 保守型",
-        "short_term": "⚡ 短線隔日沖"
+        "standard": "🧑‍💼 標準型",
     }
 
     # Ollama URL 設定
@@ -850,6 +944,51 @@ def auto_backtest_page():
                 
                 combined_equity.fillna(method='ffill', inplace=True)
                 st.line_chart(combined_equity)
+            st.divider()
+            st.subheader("🔍 各組詳細交易明細")
+            
+            # 依照報酬率由高到低排序，讓表現最好的排前面
+            sorted_results = sorted(all_results, key=lambda x: x['Return %'], reverse=True)
+
+            for item in sorted_results:
+                # 設定摺疊選單的標題 (模型 + 策略 + 報酬率)
+                expander_label = f"🏆 {item['Model']} | {item['Strategy']} : 報酬率 {item['Return %']}% (交易 {item['Trades']} 次)"
+                
+                with st.expander(expander_label):
+                    # 取出原始交易資料
+                    trades_list = item['raw_data'].get('trades', [])
+                    
+                    if trades_list:
+                        df_trades = pd.DataFrame(trades_list)
+                        
+                        # 確保欄位存在 (避免有些舊資料沒有 stop_loss 導致報錯)
+                        # 定義我們想要顯示的順序
+                        desired_cols = [
+                            'entry_date', 'exit_date', 'type', 
+                            'entry_price', 'stop_loss', 'take_profit', 'exit_price', 
+                            'profit', 'profit_pct', 'reason'
+                        ]
+                        # 只選取 DataFrame 中實際存在的欄位
+                        final_cols = [c for c in desired_cols if c in df_trades.columns]
+
+                        st.dataframe(
+                            df_trades[final_cols],
+                            column_config={
+                                "entry_date": "買入日期",
+                                "exit_date": "賣出日期",
+                                "type": "方向",
+                                "entry_price": st.column_config.NumberColumn("買入價", format="%.2f"),
+                                "stop_loss": st.column_config.NumberColumn("停損", format="%.2f"),
+                                "take_profit": st.column_config.NumberColumn("停利", format="%.2f"),
+                                "exit_price": st.column_config.NumberColumn("賣出價", format="%.2f"),
+                                "profit": st.column_config.NumberColumn("損益", format="$%d"),
+                                "profit_pct": st.column_config.NumberColumn("報酬率", format="%.2f%%"),
+                                "reason": "出場理由"
+                            },
+                            use_container_width=True
+                        )
+                    else:
+                        st.info("此組合在回測期間選擇觀望，沒有進行任何交易。")
 # ==========================================
 #  主導航控制器 (Navigation)
 # ==========================================

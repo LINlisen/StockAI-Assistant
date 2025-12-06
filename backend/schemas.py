@@ -12,7 +12,7 @@ class StockAnalysisRequest(BaseModel):
     provider: str = "gemini" 
     model_name: str = "gemini-1.5-flash"
     ollama_url: Optional[str] = None
-    
+    prompt_style: str = "standard"
 class AnalysisLogResponse(BaseModel):
     id: int
     stock_id: str
@@ -95,3 +95,9 @@ class BacktestHistoryItem(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ScreenRequest(BaseModel):
+    strategies: List[str] 
+    scope: str = "TW50"  # "TW50", "Finance", "Custom"
+    
+    custom_tickers: Optional[List[str]] = None
