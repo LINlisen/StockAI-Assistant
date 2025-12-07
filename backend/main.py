@@ -156,6 +156,13 @@ def get_user_history(user_id: int, db: Session = Depends(get_db)):
              .all()
     return logs
 
+@app.get("/api/users/{user_id}", response_model=schemas.UserResponse)
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="使用者不存在")
+    return user
+
 @app.put("/api/users/{user_id}", response_model=schemas.UserResponse)
 def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
     # 1. 找人

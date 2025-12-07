@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import time
 from stock_mapping import get_stock_name, get_stock_symbol
+from streamlit_cookies_manager import EncryptedCookieManager
 
 # 使用 try-except 包起來
 try:
@@ -21,6 +22,15 @@ except FileNotFoundError:
 except Exception:
     # 捕捉其他可能的 secrets 錯誤
     BACKEND_URL = "http://127.0.0.1:8000"
+
+# 初始化 Cookie Manager
+cookies = EncryptedCookieManager(
+    prefix="stockai_",
+    password="stockai-secret-key-2024-change-in-production"
+)
+
+if not cookies.ready():
+    st.stop()
 
 def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color="#BB86FC"):
     """
@@ -191,6 +201,21 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
 st.set_page_config(page_title="台股 AI 操盤系統", layout="wide")
 
 # --- 初始化 Session State ---
+# 先檢查 Cookie 是否有登入資訊（自動登入）
+if cookies.get("user_id") and not st.session_state.get("logged_in"):
+    try:
+        user_id = cookies.get("user_id")
+        # 從後端重新獲取使用者資料
+        res = requests.get(f"{BACKEND_URL}/api/users/{user_id}")
+        if res.status_code == 200:
+            st.session_state.logged_in = True
+            st.session_state.user_info = res.json()
+    except:
+        # Cookie 無效，清除
+        cookies["user_id"] = ""
+        cookies["logged_in"] = ""
+        cookies.save()
+
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_info" not in st.session_state:
@@ -219,6 +244,12 @@ def login_page():
                     user_data = res.json()
                     st.session_state.logged_in = True
                     st.session_state.user_info = user_data
+                    
+                    # 寫入 Cookie (持久化登入)
+                    cookies["user_id"] = str(user_data["id"])
+                    cookies["logged_in"] = "true"
+                    cookies.save()
+                    
                     st.success(f"歡迎回來，{user_data['username']}！")
                     st.rerun() # 重新整理頁面以進入主程式
                 else:
@@ -1249,7 +1280,13 @@ def main_controller():
         )
         
         st.divider()
-        if st.button("登出"):
+        if st.button("🚪 登出"):
+            # 清除 Cookie
+            cookies["user_id"] = ""
+            cookies["logged_in"] = ""
+            cookies.save()
+            
+            # 清除 Session State
             st.session_state.logged_in = False
             st.session_state.user_info = {}
             st.rerun()

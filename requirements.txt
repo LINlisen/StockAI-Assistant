@@ -12,3 +12,4 @@ mplfinance
 streamlit
 requests
 plotly
+streamlit-cookies-manager
