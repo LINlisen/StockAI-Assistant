@@ -3,6 +3,8 @@ import streamlit as st
 import requests
 import pandas as pd
 import mplfinance as mpf
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import time
 from stock_mapping import get_stock_name, get_stock_symbol
 
@@ -19,6 +21,144 @@ except FileNotFoundError:
 except Exception:
     # 捕捉其他可能的 secrets 錯誤
     BACKEND_URL = "http://127.0.0.1:8000"
+
+def create_interactive_candlestick_chart(df, stock_id, chart_style):
+    """
+    建立互動式 K 線圖，包含：
+    - Hover 顯示完整價格資訊
+    - 5MA, 10MA, 20MA, 60MA 均線
+    - 成交量子圖
+    - 繪圖工具 (垂直線、矩形框)
+    """
+    # 計算均線（只計算不存在的）
+    if 'MA5' not in df.columns:
+        df['MA5'] = df['Close'].rolling(window=5).mean()
+    if 'MA10' not in df.columns:
+        df['MA10'] = df['Close'].rolling(window=10).mean()
+    if 'MA20' not in df.columns:
+        df['MA20'] = df['Close'].rolling(window=20).mean()
+    if 'MA60' not in df.columns:
+        df['MA60'] = df['Close'].rolling(window=60).mean()
+    
+    # 建立子圖：主圖 (K線+均線) + 副圖 (成交量)
+    has_volume = 'Volume' in df.columns
+    
+    if has_volume:
+        fig = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.03,
+            row_heights=[0.7, 0.3],
+            subplot_titles=(f'{stock_id} K線圖', '成交量')
+        )
+    else:
+        fig = make_subplots(
+            rows=1, cols=1,
+            subplot_titles=(f'{stock_id} K線圖',)
+        )
+    
+    # 設定配色方案
+    if "紅綠" in chart_style:
+        # 台灣習慣：漲紅跌綠
+        increasing_color = '#FF0000'  # 紅色
+        decreasing_color = '#00FF00'  # 綠色
+    else:
+        # 黑白配色：漲白跌黑
+        increasing_color = '#FFFFFF'  # 白色
+        decreasing_color = '#000000'  # 黑色
+    
+    # 加入 K 線圖
+    candlestick = go.Candlestick(
+        x=df.index,
+        open=df['Open'],
+        high=df['High'],
+        low=df['Low'],
+        close=df['Close'],
+        name='K線',
+        increasing_line_color=increasing_color,
+        decreasing_line_color=decreasing_color,
+        hovertemplate='<b>日期</b>: %{x|%Y-%m-%d}<br>' +
+                      '<b>開盤</b>: %{open:.2f}<br>' +
+                      '<b>最高</b>: %{high:.2f}<br>' +
+                      '<b>最低</b>: %{low:.2f}<br>' +
+                      '<b>收盤</b>: %{close:.2f}<br>' +
+                      '<extra></extra>'
+    )
+    fig.add_trace(candlestick, row=1, col=1)
+    
+    # 加入均線
+    ma_colors = {
+        'MA5': '#FF6B6B',   # 淺紅
+        'MA10': '#4ECDC4',  # 青色
+        'MA20': '#FFD93D',  # 黃色
+        'MA60': '#95E1D3'   # 淺綠
+    }
+    
+    for ma_name, color in ma_colors.items():
+        if ma_name in df.columns:  # 只繪製存在的均線
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index,
+                    y=df[ma_name],
+                    name=ma_name,
+                    line=dict(color=color, width=1.5),
+                    hovertemplate=f'<b>{ma_name}</b>: %{{y:.2f}}<extra></extra>'
+                ),
+                row=1, col=1
+            )
+    
+    # 加入成交量 (如果有)
+    if has_volume:
+        # 根據漲跌設定成交量顏色 - 使用 reset_index 來避免迭代問題
+        df_temp = df.reset_index()
+        colors = []
+        for idx in range(len(df_temp)):
+            if df_temp.loc[idx, 'Close'] >= df_temp.loc[idx, 'Open']:
+                colors.append(increasing_color)
+            else:
+                colors.append(decreasing_color)
+        
+        fig.add_trace(
+            go.Bar(
+                x=df.index,
+                y=df['Volume'],
+                name='成交量',
+                marker_color=colors,
+                hovertemplate='<b>成交量</b>: %{y:,.0f}<extra></extra>'
+            ),
+            row=2, col=1
+        )
+    
+    # 更新布局
+    fig.update_layout(
+        title=f'{stock_id} 技術分析圖',
+        yaxis_title='價格 (TWD)',
+        xaxis_rangeslider_visible=False,
+        hovermode='x unified',
+        height=700,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        # 啟用繪圖工具
+        dragmode='zoom',
+        modebar=dict(
+            add=['drawline', 'drawrect', 'eraseshape']
+        )
+    )
+    
+    if has_volume:
+        fig.update_yaxes(title_text="價格 (TWD)", row=1, col=1)
+        fig.update_yaxes(title_text="成交量", row=2, col=1)
+    
+    fig.update_xaxes(title_text="日期", row=2 if has_volume else 1, col=1)
+    
+    return fig
+
 
 st.set_page_config(page_title="台股 AI 操盤系統", layout="wide")
 
@@ -312,57 +452,46 @@ def analysis_page():
                     yahoo_url = f"https://tw.stock.yahoo.com/quote/{stock_id}.TW/technical-analysis"
                     st.markdown(f"📊 [查看 Yahoo Finance 技術分析]({yahoo_url})")
                     
-                    # 繪製 K 線圖
+                    # 繪製互動式 K 線圖
                     if data.get('technical_data'):
-                        raw = data['technical_data']
-                        df = pd.DataFrame(raw)
-                        df['Date'] = pd.to_datetime(df['Date'])
-                        df.set_index('Date', inplace=True)
-                        
-                        # 確保有 OHLC 資料
-                        required_cols = ['Open', 'High', 'Low', 'Close']
-                        if all(col in df.columns for col in required_cols):
-                            st.subheader("📈 K 線圖")
+                        try:
+                            raw = data['technical_data']
+                            st.write("🔍 Debug: 收到資料筆數:", len(raw.get('Date', [])))
                             
-                            # 根據使用者選擇的配色方案設定樣式
-                            if "紅綠" in chart_style:
-                                # 台灣習慣：漲紅跌綠
-                                mc = mpf.make_marketcolors(
-                                    up='red',      # 上漲為紅色
-                                    down='green',  # 下跌為綠色
-                                    edge='inherit',
-                                    wick='inherit',
-                                    volume='in'
-                                )
+                            df = pd.DataFrame(raw)
+                            st.write("🔍 Debug: DataFrame 欄位:", df.columns.tolist())
+                            st.write("🔍 Debug: DataFrame 形狀:", df.shape)
+                            
+                            df['Date'] = pd.to_datetime(df['Date'])
+                            df.set_index('Date', inplace=True)
+                            
+                            # 確保有 OHLC 資料
+                            required_cols = ['Open', 'High', 'Low', 'Close']
+                            missing_cols = [col for col in required_cols if col not in df.columns]
+                            
+                            if missing_cols:
+                                st.error(f"❌ 缺少必要欄位: {missing_cols}")
+                                st.write("可用欄位:", df.columns.tolist())
+                            elif all(col in df.columns for col in required_cols):
+                                st.subheader("📈 互動式 K 線圖")
+                                st.caption("💡 提示：可使用滑鼠 hover 查看詳細資訊，點擊右上角工具列可繪製支撐壓力線")
+                                
+                                # 使用新的互動式圖表函數
+                                fig = create_interactive_candlestick_chart(df, stock_id, chart_style)
+                                
+                                # 使用 st.write 顯示 Plotly 圖表（比 st.plotly_chart 更穩定）
+                                st.write(fig)
                             else:
-                                # 黑白配色：漲白跌黑
-                                mc = mpf.make_marketcolors(
-                                    up='white',    # 上漲為白色
-                                    down='black',  # 下跌為黑色
-                                    edge='black',
-                                    wick='black',
-                                    volume='in'
-                                )
-                            
-                            s = mpf.make_mpf_style(marketcolors=mc, gridstyle='--', y_on_right=False)
-                            
-                            # 繪製 K 線圖
-                            fig, axes = mpf.plot(
-                                df,
-                                type='candle',      # K 線圖
-                                style=s,
-                                title=f'{stock_id} K線圖',
-                                ylabel='價格 (TWD)',
-                                volume=True if 'Volume' in df.columns else False,
-                                figsize=(12, 6),
-                                returnfig=True
-                            )
-                            
-                            st.pyplot(fig)
-                        else:
-                            # 如果沒有完整 OHLC 資料，顯示折線圖
-                            st.subheader("📈 收盤價走勢")
-                            st.line_chart(df['Close'])
+                                # 如果沒有完整 OHLC 資料，顯示折線圖
+                                st.subheader("📈 收盤價走勢")
+                                st.line_chart(df['Close'])
+                        except Exception as e:
+                            st.error(f"❌ 圖表繪製錯誤: {str(e)}")
+                            st.write("錯誤詳情:", type(e).__name__)
+                            import traceback
+                            st.code(traceback.format_exc())
+                    else:
+                        st.warning("⚠️ 後端未返回 technical_data")
                 else:
                     st.error(f"分析失敗: {res.text}")
             except Exception as e:
