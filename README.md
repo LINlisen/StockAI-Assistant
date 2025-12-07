@@ -63,9 +63,57 @@ pip install -r requirements.txt
 
 ## 🖥️ 啟動應用程式
 
-本系統分為後端 (FastAPI) 與前端 (Streamlit)，需分別啟動。
+### 🚀 方法一：一鍵啟動 (推薦)
 
-### 步驟 1: 啟動後端 API
+我們提供了自動化啟動腳本，可同時啟動後端、前端與 Ollama 服務。
+記得先進入 venv
+
+#### Windows (PowerShell)：
+
+```powershell
+# 啟動所有服務
+.\startsys.ps1
+
+# 查看說明
+.\startsys.ps1 -help
+
+# 只啟動前後端，跳過 Ollama
+.\startsys.ps1 -skipOllama
+
+# 停止所有服務
+.\stopsys.ps1
+```
+
+> **💡 提示**：首次執行可能需要設定執行權限：
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+
+#### Linux / Mac / Git Bash：
+
+```bash
+# 給予執行權限 (首次使用)
+chmod +x startsys.sh
+
+# 啟動所有服務
+./startsys.sh
+
+# 查看說明
+./startsys.sh --help
+
+# 只啟動前後端，跳過 Ollama
+./startsys.sh --skip-ollama
+
+# 停止服務：按 Ctrl+C
+```
+
+---
+
+### 📋 方法二：手動分別啟動
+
+如果您想要分別控制各個服務，可以手動啟動：
+
+#### 步驟 1: 啟動後端 API
 
 開啟一個終端機視窗，執行：
 
@@ -76,7 +124,7 @@ uvicorn main:app --reload
 *   後端預設執行於: `http://127.0.0.1:8000`
 *   API 文件 (Swagger UI): `http://127.0.0.1:8000/docs`
 
-### 步驟 2: 啟動前端介面
+#### 步驟 2: 啟動前端介面
 
 開啟另一個終端機視窗，執行：
 
@@ -85,6 +133,28 @@ cd frontend
 streamlit run app.py
 ```
 *   前端預設執行於: `http://localhost:8501`
+
+#### 步驟 3: 啟動 Ollama (選用)
+
+如需使用本地 AI 模型：
+
+```bash
+ollama serve
+```
+*   Ollama 預設執行於: `http://localhost:11434`
+
+---
+
+### 📊 服務狀態確認
+
+啟動成功後，您可以訪問以下網址：
+
+| 服務 | 網址 | 說明 |
+|------|------|------|
+| **前端介面** | http://localhost:8501 | Streamlit 使用者介面 |
+| **後端 API** | http://127.0.0.1:8000 | FastAPI 後端服務 |
+| **API 文件** | http://127.0.0.1:8000/docs | Swagger UI 互動式文件 |
+| **Ollama** | http://localhost:11434 | 本地 AI 模型服務 (選用) |
 
 ## 📖 使用說明
 
