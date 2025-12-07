@@ -4,7 +4,7 @@ import requests
 import pandas as pd
 import mplfinance as mpf
 import time
-from stock_mapping import get_stock_name  # 新增這行
+from stock_mapping import get_stock_name, get_stock_symbol
 
 # 使用 try-except 包起來
 try:
@@ -225,18 +225,35 @@ def analysis_page():
         selected_style_label = st.selectbox("分析風格", list(style_options.values()))
         prompt_style = [k for k, v in style_options.items() if v == selected_style_label][0]
         
-        # --- 股票選擇 (新增自動顯示名稱功能) ---
+       # --- 股票選擇 (支援雙向查詢) ---
         st.divider()
         st.subheader("📊 股票選擇")
         
-        stock_id = st.text_input("股票代號", "2330", key="stock_code_input")
+        # 建立兩欄布局
+        col1, col2 = st.columns(2)
         
-        # 自動顯示股票名稱（使用 info 實現動態更新）
-        stock_name = get_stock_name(stock_id)
-        if stock_name:
-            st.info(f"**股票名稱：** {stock_name}")
-        else:
-            st.warning(f"**股票代號 {stock_id}** - 未在對應表中找到")
+        with col1:
+            stock_id = st.text_input("股票代號", "2330", key="stock_code_input", 
+                                     help="輸入股票代號，例如：2330")
+            # 顯示對應的股票名稱
+            stock_name = get_stock_name(stock_id)
+            if stock_name:
+                st.success(f"✓ {stock_name}")
+            else:
+                st.warning("未知股票")
+        
+        with col2:
+            stock_name_input = st.text_input("或輸入股票名稱", "", key="stock_name_input",
+                                            help="輸入股票名稱，例如：台積電")
+            # 顯示對應的股票代號
+            if stock_name_input:
+                stock_symbol = get_stock_symbol(stock_name_input)
+                if stock_symbol:
+                    st.success(f"✓ {stock_symbol}")
+                    # 自動更新 stock_id（需要使用 session_state）
+                    st.info(f"💡 請在左側代號欄位輸入：{stock_symbol}")
+                else:
+                    st.warning("未找到對應股票")
         
         # 這裡建議加上英文 mapping，因為後端通常習慣判斷 "Long"/"Short"
         mode_display = st.selectbox("操作方向", ["做多 (Long)", "做空 (Short)"])
