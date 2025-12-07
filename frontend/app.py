@@ -22,13 +22,19 @@ except Exception:
     # 捕捉其他可能的 secrets 錯誤
     BACKEND_URL = "http://127.0.0.1:8000"
 
-def create_interactive_candlestick_chart(df, stock_id, chart_style):
+def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color="#BB86FC"):
     """
     建立互動式 K 線圖，包含：
     - Hover 顯示完整價格資訊
     - 5MA, 10MA, 20MA, 60MA 均線
     - 成交量子圖
     - 繪圖工具 (垂直線、矩形框)
+    
+    參數:
+        df: 股票資料 DataFrame
+        stock_id: 股票代號
+        chart_style: 圖表配色方案
+        drawing_color: 畫線顏色 (預設亮紫色)
     """
     # 計算均線（只計算不存在的）
     if 'MA5' not in df.columns:
@@ -94,15 +100,23 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style):
         'MA60': '#95E1D3'   # 淺綠
     }
     
+    # 中文均線名稱對應
+    ma_names_zh = {
+        'MA5': '5日均線',
+        'MA10': '10日均線',
+        'MA20': '20日均線',
+        'MA60': '60日均線'
+    }
+    
     for ma_name, color in ma_colors.items():
         if ma_name in df.columns:  # 只繪製存在的均線
             fig.add_trace(
                 go.Scatter(
                     x=df.index,
                     y=df[ma_name],
-                    name=ma_name,
+                    name=ma_names_zh[ma_name],
                     line=dict(color=color, width=1.5),
-                    hovertemplate=f'<b>{ma_name}</b>: %{{y:.2f}}<extra></extra>'
+                    hovertemplate=f'<b>{ma_names_zh[ma_name]}</b>: %{{y:.2f}}<extra></extra>'
                 ),
                 row=1, col=1
             )
@@ -148,7 +162,20 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style):
         dragmode='zoom',
         modebar=dict(
             add=['drawline', 'drawrect', 'eraseshape']
+        ),
+        # 設定畫線顏色
+        newshape=dict(
+            line_color=drawing_color,
+            line_width=2,
+            opacity=0.8
         )
+    )
+    
+    # 隱藏非交易日（週末和假日）
+    fig.update_xaxes(
+        rangebreaks=[
+            dict(bounds=["sat", "mon"]),  # 隱藏週末
+        ]
     )
     
     if has_volume:
@@ -158,6 +185,7 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style):
     fig.update_xaxes(title_text="日期", row=2 if has_volume else 1, col=1)
     
     return fig
+
 
 
 st.set_page_config(page_title="台股 AI 操盤系統", layout="wide")
@@ -401,6 +429,7 @@ def analysis_page():
         
         cost = st.number_input("成本", 0.0)
 
+
         # 圖表配色選擇
         st.divider()
         chart_style = st.selectbox(
@@ -408,7 +437,16 @@ def analysis_page():
             ["紅綠配色 (漲紅跌綠)", "黑白配色 (漲白跌黑)"],
             help="選擇 K 線圖的配色方案"
         )
+        
+        # 畫線顏色選擇
+        drawing_color = st.color_picker(
+            "✏️ 畫線顏色",
+            value="#BB86FC",  # 亮紫色
+            help="選擇繪製支撐壓力線的顏色"
+        )
+        
         run_btn = st.button("🚀 開始分析", type="primary")
+
 
     
 
@@ -456,12 +494,7 @@ def analysis_page():
                     if data.get('technical_data'):
                         try:
                             raw = data['technical_data']
-                            st.write("🔍 Debug: 收到資料筆數:", len(raw.get('Date', [])))
-                            
                             df = pd.DataFrame(raw)
-                            st.write("🔍 Debug: DataFrame 欄位:", df.columns.tolist())
-                            st.write("🔍 Debug: DataFrame 形狀:", df.shape)
-                            
                             df['Date'] = pd.to_datetime(df['Date'])
                             df.set_index('Date', inplace=True)
                             
@@ -477,7 +510,7 @@ def analysis_page():
                                 st.caption("💡 提示：可使用滑鼠 hover 查看詳細資訊，點擊右上角工具列可繪製支撐壓力線")
                                 
                                 # 使用新的互動式圖表函數
-                                fig = create_interactive_candlestick_chart(df, stock_id, chart_style)
+                                fig = create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color)
                                 
                                 # 使用 st.write 顯示 Plotly 圖表（比 st.plotly_chart 更穩定）
                                 st.write(fig)
