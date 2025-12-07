@@ -260,7 +260,17 @@ def analysis_page():
         mode = "Long" if "Long" in mode_display else "Short"
         
         cost = st.number_input("成本", 0.0)
+
+        # 圖表配色選擇
+        st.divider()
+        chart_style = st.selectbox(
+            "📊 圖表配色",
+            ["紅綠配色 (漲紅跌綠)", "黑白配色 (漲白跌黑)"],
+            help="選擇 K 線圖的配色方案"
+        )
         run_btn = st.button("🚀 開始分析", type="primary")
+
+    
 
     # --- 執行按鈕邏輯 ---
     if run_btn:
@@ -302,13 +312,57 @@ def analysis_page():
                     yahoo_url = f"https://tw.stock.yahoo.com/quote/{stock_id}.TW/technical-analysis"
                     st.markdown(f"📊 [查看 Yahoo Finance 技術分析]({yahoo_url})")
                     
-                    # 繪圖
+                    # 繪製 K 線圖
                     if data.get('technical_data'):
                         raw = data['technical_data']
                         df = pd.DataFrame(raw)
                         df['Date'] = pd.to_datetime(df['Date'])
                         df.set_index('Date', inplace=True)
-                        st.line_chart(df['Close'])
+                        
+                        # 確保有 OHLC 資料
+                        required_cols = ['Open', 'High', 'Low', 'Close']
+                        if all(col in df.columns for col in required_cols):
+                            st.subheader("📈 K 線圖")
+                            
+                            # 根據使用者選擇的配色方案設定樣式
+                            if "紅綠" in chart_style:
+                                # 台灣習慣：漲紅跌綠
+                                mc = mpf.make_marketcolors(
+                                    up='red',      # 上漲為紅色
+                                    down='green',  # 下跌為綠色
+                                    edge='inherit',
+                                    wick='inherit',
+                                    volume='in'
+                                )
+                            else:
+                                # 黑白配色：漲白跌黑
+                                mc = mpf.make_marketcolors(
+                                    up='white',    # 上漲為白色
+                                    down='black',  # 下跌為黑色
+                                    edge='black',
+                                    wick='black',
+                                    volume='in'
+                                )
+                            
+                            s = mpf.make_mpf_style(marketcolors=mc, gridstyle='--', y_on_right=False)
+                            
+                            # 繪製 K 線圖
+                            fig, axes = mpf.plot(
+                                df,
+                                type='candle',      # K 線圖
+                                style=s,
+                                title=f'{stock_id} K線圖',
+                                ylabel='價格 (TWD)',
+                                volume=True if 'Volume' in df.columns else False,
+                                figsize=(12, 6),
+                                returnfig=True
+                            )
+                            
+                            st.pyplot(fig)
+                        else:
+                            # 如果沒有完整 OHLC 資料，顯示折線圖
+                            st.subheader("📈 收盤價走勢")
+                            st.line_chart(df['Close'])
                 else:
                     st.error(f"分析失敗: {res.text}")
             except Exception as e:

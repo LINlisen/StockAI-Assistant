@@ -13,7 +13,7 @@
 
 ## 🛠️ 系統需求
 
-*   **Python**: 3.8 或以上版本
+*   **Python**: 3.8 或以上版本 -- 推薦使用 3.12
 *   **資料庫**: 預設使用 SQLite (內建)，可自行配置 PostgreSQL。
 *   **AI 模型**:
     *   Google Gemini API Key (必備)
