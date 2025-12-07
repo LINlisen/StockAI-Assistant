@@ -4,6 +4,7 @@ import requests
 import pandas as pd
 import mplfinance as mpf
 import time
+from stock_mapping import get_stock_name  # 新增這行
 
 # 使用 try-except 包起來
 try:
@@ -220,10 +221,22 @@ def analysis_page():
             "aggressive": "🔥 激進型 (動能交易)",
             "conservative": "🛡️ 保守型 (價值波段)"
         }
+
         selected_style_label = st.selectbox("分析風格", list(style_options.values()))
         prompt_style = [k for k, v in style_options.items() if v == selected_style_label][0]
-        # --- 通用參數 ---
-        stock_id = st.text_input("股票代號", "2330")
+        
+        # --- 股票選擇 (新增自動顯示名稱功能) ---
+        st.divider()
+        st.subheader("📊 股票選擇")
+        
+        stock_id = st.text_input("股票代號", "2330", key="stock_code_input")
+        
+        # 自動顯示股票名稱（使用 info 實現動態更新）
+        stock_name = get_stock_name(stock_id)
+        if stock_name:
+            st.info(f"**股票名稱：** {stock_name}")
+        else:
+            st.warning(f"**股票代號 {stock_id}** - 未在對應表中找到")
         
         # 這裡建議加上英文 mapping，因為後端通常習慣判斷 "Long"/"Short"
         mode_display = st.selectbox("操作方向", ["做多 (Long)", "做空 (Short)"])
