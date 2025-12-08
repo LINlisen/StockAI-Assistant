@@ -764,7 +764,8 @@ def backtest_page():
     
     with col_set1:
         # 選擇 AI 提供者
-        ai_provider = st.radio("選擇 AI 模型來源", ["Google Gemini (雲端)", "Ollama (本地)"], horizontal=True)
+        #ai_provider = st.radio("選擇 AI 模型來源", ["Google Gemini (雲端)", "Ollama (本地)"], horizontal=True)
+        ai_provider = st.radio("選擇 AI 模型來源", ["Ollama (本地)"], horizontal=True)
         provider_code = "gemini" if "Gemini" in ai_provider else "ollama"
 
     with col_set2:
@@ -777,7 +778,7 @@ def backtest_page():
             # Ollama 設定
             api_key = "ollama_no_key" # Ollama 不需要 Key，但後端需要字串
             # 這裡可以讓使用者自己輸入，或者寫死你有裝的模型
-            model_name = st.text_input("Ollama 模型名稱", "llama3.2", help="請確保本地已執行 `ollama run <模型名>`")
+            model_name = st.text_input("Ollama 模型名稱", "gemma3:12b", help="請確保本地已執行 `ollama run <模型名>`")
             st.caption("⚠️ 須確保後端電腦已安裝 Ollama 並開啟服務 (port 11434)")
         # 🔥 新增策略風格選擇
         prompt_options = {
