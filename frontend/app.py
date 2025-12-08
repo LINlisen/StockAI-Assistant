@@ -132,6 +132,33 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
                 ),
                 row=1, col=1
             )
+
+    # 加入布林通道 (如果有資料)
+    if 'Upper' in df.columns and 'Lower' in df.columns:
+        # 上軌
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df['Upper'],
+                name='布林上軌',
+                line=dict(color='rgba(128, 128, 128, 0.5)', width=1, dash='dash'), # 灰色虛線
+                hovertemplate='<b>上軌</b>: %{y:.2f}<extra></extra>'
+            ),
+            row=1, col=1
+        )
+        # 下軌 (填滿與上軌之間的區域)
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df['Lower'],
+                name='布林下軌',
+                line=dict(color='rgba(128, 128, 128, 0.5)', width=1, dash='dash'),
+                fill='tonexty', # 填滿與上一條線(上軌)之間的區域
+                fillcolor='rgba(128, 128, 128, 0.05)', # 極淡灰色
+                hovertemplate='<b>下軌</b>: %{y:.2f}<extra></extra>'
+            ),
+            row=1, col=1
+        )
     
     # 加入成交量 (如果有)
     if has_volume:
