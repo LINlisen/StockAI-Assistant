@@ -8,6 +8,8 @@ from plotly.subplots import make_subplots
 import time
 from stock_mapping import get_stock_name, get_stock_symbol
 from streamlit_cookies_manager import EncryptedCookieManager
+import re
+import json
 
 # 使用 try-except 包起來
 try:
@@ -32,7 +34,7 @@ cookies = EncryptedCookieManager(
 if not cookies.ready():
     st.stop()
 
-def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color="#BB86FC"):
+def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color="#BB86FC", key_levels=None):
     """
     建立互動式 K 線圖，包含：
     - Hover 顯示完整價格資訊
@@ -152,6 +154,47 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
             ),
             row=2, col=1
         )
+    
+    if key_levels:
+        # A. 畫壓力線 (Resistance) - 紅色虛線
+        if key_levels.get('res'):
+            fig.add_hline(
+                y=key_levels['res'], 
+                line_dash="dash", line_color="red", line_width=1.5,
+                annotation_text=f"壓力 {key_levels['res']}", 
+                annotation_position="top right",
+                row=1, col=1
+            )
+
+        # B. 畫支撐線 (Support) - 綠色虛線
+        if key_levels.get('sup'):
+            fig.add_hline(
+                y=key_levels['sup'], 
+                line_dash="dash", line_color="green", line_width=1.5,
+                annotation_text=f"支撐 {key_levels['sup']}", 
+                annotation_position="bottom right",
+                row=1, col=1
+            )
+
+        # C. 標示爆量日期 (Volume Spike)
+        if key_levels.get('date'):
+            try:
+                spike_date = pd.to_datetime(key_levels['date'])
+                # 確保日期在資料範圍內
+                if spike_date in df.index:
+                    # 取得當天高點，把箭頭畫在 K 棒上方
+                    high_val = df.loc[spike_date]['High']
+                    
+                    fig.add_annotation(
+                        x=spike_date, y=high_val,
+                        text="爆量日", showarrow=True,
+                        arrowhead=1, arrowsize=2, arrowwidth=2,
+                        arrowcolor="#BB86FC", # 使用你在前端設定的亮紫色
+                        ay=-40, # 箭頭向上偏移
+                        row=1, col=1
+                    )
+            except Exception as e:
+                print(f"日期標示錯誤: {e}")
     
     # 更新布局
     fig.update_layout(
@@ -338,6 +381,30 @@ def settings_page():
 # ==========================================
 #  頁面 C: AI 操盤系統 (主功能)
 # ==========================================
+def extract_key_levels(text):
+    """
+    從 AI 分析文本中提取 JSON 格式的關鍵數據
+    目標格式: { "resistancePrice": "39.0", "supportPrice": 34.0, "volumeSpikeDate": "2025/12/08" }
+    """
+    try:
+        # 使用正規表達式尋找 JSON 區塊 (假設 AI 會用大括號包起來)
+        # 尋找包含 resistancePrice 的最外層大括號
+        match = re.search(r'\{.*"resistancePrice".*\}', text, re.DOTALL)
+        
+        if match:
+            json_str = match.group(0)
+            data = json.loads(json_str)
+            return {
+                "res": float(data.get("resistancePrice", 0)),
+                "sup": float(data.get("supportPrice", 0)),
+                "date": data.get("volumeSpikeDate", None)
+            }
+    except Exception as e:
+        print(f"JSON 提取失敗: {e}")
+    
+    return None
+
+
 def analysis_page():
     st.title("📈 台股 AI 操盤分析師")
     
@@ -532,7 +599,12 @@ def analysis_page():
                             # 確保有 OHLC 資料
                             required_cols = ['Open', 'High', 'Low', 'Close']
                             missing_cols = [col for col in required_cols if col not in df.columns]
-                            
+                            key_levels = extract_key_levels(data['ai_analysis'])
+                            if key_levels:
+                                    k1, k2, k3 = st.columns(3)
+                                    k1.metric("AI 判斷壓力", key_levels['res'])
+                                    k2.metric("AI 判斷支撐", key_levels['sup'])
+                                    k3.metric("爆量轉折日", key_levels['date'])
                             if missing_cols:
                                 st.error(f"❌ 缺少必要欄位: {missing_cols}")
                                 st.write("可用欄位:", df.columns.tolist())
@@ -540,8 +612,9 @@ def analysis_page():
                                 st.subheader("📈 互動式 K 線圖")
                                 st.caption("💡 提示：可使用滑鼠 hover 查看詳細資訊，點擊右上角工具列可繪製支撐壓力線")
                                 
+                                
                                 # 使用新的互動式圖表函數
-                                fig = create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color)
+                                fig = create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color, key_levels=key_levels)
                                 
                                 # 使用 st.write 顯示 Plotly 圖表（比 st.plotly_chart 更穩定）
                                 st.write(fig)
