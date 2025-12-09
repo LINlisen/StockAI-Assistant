@@ -53,21 +53,24 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
         show_vol: 是否顯示成交量
     """
     if show_ma is None:
+        # 如果沒有指定，預設計算所有均線
         show_ma = ['MA5', 'MA10', 'MA20', 'MA60']
 
-    # 計算均線（只計算需要的）
-    for ma in show_ma:
-        if ma == 'MA5' and 'MA5' not in df.columns:
-            df['MA5'] = df['Close'].rolling(window=5).mean()
-        elif ma == 'MA10' and 'MA10' not in df.columns:
-            df['MA10'] = df['Close'].rolling(window=10).mean()
-        elif ma == 'MA20' and 'MA20' not in df.columns:
-            df['MA20'] = df['Close'].rolling(window=20).mean()
-        elif ma == 'MA60' and 'MA60' not in df.columns:
-            df['MA60'] = df['Close'].rolling(window=60).mean()
+    # 計算每一條均線 (無論是否顯示，都先計算好以便加入圖表)
+    # 這樣就可以在前端透過 legend 切換顯示/隱藏，不需重新渲染
+    if 'MA5' not in df.columns:
+        df['MA5'] = df['Close'].rolling(window=5).mean()
+    if 'MA10' not in df.columns:
+        df['MA10'] = df['Close'].rolling(window=10).mean()
+    if 'MA20' not in df.columns:
+        df['MA20'] = df['Close'].rolling(window=20).mean()
+    if 'MA60' not in df.columns:
+        df['MA60'] = df['Close'].rolling(window=60).mean()
+    
     
     # 建立子圖：主圖 (K線+均線) + 副圖 (成交量)
-    has_volume = 'Volume' in df.columns and show_vol
+    # 只要 DataFrame 中有 Volume 欄位就繪製，不管 show_vol 是 True/False，我們在 trace 層級控制顯示
+    has_volume = 'Volume' in df.columns
     
     if has_volume:
         fig = make_subplots(
@@ -129,20 +132,28 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
     }
     
     for ma_name, color in ma_colors.items():
-        if ma_name in df.columns and ma_name in show_ma:  # 只繪製存在的均線
+        if ma_name in df.columns:
+            # 決定預設是否顯示
+            # 如果 ma_name 在 show_ma (使用者預選列表) 中，則 visible=True
+            # 否則 visible='legendonly' (隱藏但顯示在圖例中，點擊可開啟)
+            is_visible = True if ma_name in show_ma else 'legendonly'
+            
             fig.add_trace(
                 go.Scatter(
                     x=df.index,
                     y=df[ma_name],
                     name=ma_names_zh[ma_name],
                     line=dict(color=color, width=1.5),
-                    hovertemplate=f'<b>{ma_names_zh[ma_name]}</b>: %{{y:.2f}}<extra></extra>'
+                    hovertemplate=f'<b>{ma_names_zh[ma_name]}</b>: %{{y:.2f}}<extra></extra>',
+                    visible=is_visible
                 ),
                 row=1, col=1
             )
 
     # 加入布林通道 (如果有資料)
-    if show_bb and 'Upper' in df.columns and 'Lower' in df.columns:
+    # 與均線邏輯相同，預設加入圖表
+    if 'Upper' in df.columns and 'Lower' in df.columns:
+        bb_visible = True if show_bb else 'legendonly'
         # 上軌
         fig.add_trace(
             go.Scatter(
@@ -150,7 +161,8 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
                 y=df['Upper'],
                 name='布林上軌',
                 line=dict(color='rgba(128, 128, 128, 0.5)', width=1, dash='dash'), # 灰色虛線
-                hovertemplate='<b>上軌</b>: %{y:.2f}<extra></extra>'
+                hovertemplate='<b>上軌</b>: %{y:.2f}<extra></extra>',
+                visible=bb_visible
             ),
             row=1, col=1
         )
@@ -163,7 +175,8 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
                 line=dict(color='rgba(128, 128, 128, 0.5)', width=1, dash='dash'),
                 fill='tonexty', # 填滿與上一條線(上軌)之間的區域
                 fillcolor='rgba(128, 128, 128, 0.05)', # 極淡灰色
-                hovertemplate='<b>下軌</b>: %{y:.2f}<extra></extra>'
+                hovertemplate='<b>下軌</b>: %{y:.2f}<extra></extra>',
+                visible=bb_visible
             ),
             row=1, col=1
         )
@@ -179,13 +192,15 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
             else:
                 colors.append(decreasing_color)
         
+        vol_visible = True if show_vol else 'legendonly'
         fig.add_trace(
             go.Bar(
                 x=df.index,
                 y=df['Volume'],
                 name='成交量',
                 marker_color=colors,
-                hovertemplate='<b>成交量</b>: %{y:,.0f}<extra></extra>'
+                hovertemplate='<b>成交量</b>: %{y:,.0f}<extra></extra>',
+                visible=vol_visible
             ),
             row=2, col=1
         )
@@ -579,17 +594,13 @@ def analysis_page():
         )
 
         st.divider()
-        st.write("📈 圖表顯示設定")
-        col_c1, col_c2 = st.columns(2)
-        with col_c1:
-            show_ma_list = st.multiselect(
-                "顯示均線",
-                ['MA5', 'MA10', 'MA20', 'MA60'],
-                default=['MA5', 'MA10', 'MA20', 'MA60']
-            )
-        with col_c2:
-            show_bb_check = st.checkbox("顯示布林通道", value=True)
-            show_vol_check = st.checkbox("顯示成交量", value=True)
+        st.caption("💡 提示：分析完成後，可直接在圖表右側的「圖例 (Legend)」點擊項目，直接開關顯示線條，無需重新載入。")
+        
+        # 預設全選，讓所有資料都進入圖表
+        # 我們將控制權交給 Plotly 前端
+        default_ma = ['MA5', 'MA10', 'MA20', 'MA60']
+        default_bb = True
+        default_vol = True
         
         run_btn = st.button("🚀 開始分析", type="primary")
 
@@ -662,7 +673,14 @@ def analysis_page():
                                 
                                 
                                 # 使用新的互動式圖表函數
-                                fig = create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color, key_levels=key_levels, show_ma=show_ma_list, show_bb=show_bb_check, show_vol=show_vol_check)
+                                # 傳入所有選項，讓函數生成完整的圖表
+                                fig = create_interactive_candlestick_chart(
+                                    df, stock_id, chart_style, drawing_color, 
+                                    key_levels=key_levels, 
+                                    show_ma=default_ma, 
+                                    show_bb=default_bb, 
+                                    show_vol=default_vol
+                                )
                                 
                                 # 使用 st.write 顯示 Plotly 圖表（比 st.plotly_chart 更穩定）
                                 st.write(fig)
