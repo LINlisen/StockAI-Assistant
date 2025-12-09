@@ -2,6 +2,8 @@
 # This script starts Backend (FastAPI), Frontend (Streamlit), and Ollama services
 
 param(
+    [Parameter(Position = 0)]
+    [string]$DbContainer,
     [switch]$h,
     [switch]$help,
     [switch]$skipOllama
@@ -14,7 +16,7 @@ function Show-Help {
     Write-Host "=========================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Usage:" -ForegroundColor White
-    Write-Host "  .\startsys.ps1 [Options]" -ForegroundColor Gray
+    Write-Host "  .\startsys.ps1 [ContainerName] [Options]" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Options:" -ForegroundColor White
     Write-Host "  -h, -help        Show this help message" -ForegroundColor Gray
@@ -24,6 +26,7 @@ function Show-Help {
     Write-Host "  .\startsys.ps1              # Start all services" -ForegroundColor Gray
     Write-Host "  .\startsys.ps1 -help        # Show help" -ForegroundColor Gray
     Write-Host "  .\startsys.ps1 -skipOllama  # Start only backend and frontend" -ForegroundColor Gray
+    Write-Host "  .\startsys.ps1 postgres-db  # Start with specific DB container" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Services:" -ForegroundColor White
     Write-Host "  Backend API (FastAPI)    - http://127.0.0.1:8000" -ForegroundColor Gray
@@ -49,7 +52,8 @@ Write-Host ""
 # 1. Start Ollama service
 if ($skipOllama) {
     Write-Host "[1/3] Skipping Ollama service (-skipOllama)" -ForegroundColor Yellow
-} else {
+}
+else {
     Write-Host "[1/3] Starting Ollama service..." -ForegroundColor Blue
 
     $ollamaInstalled = Get-Command ollama -ErrorAction SilentlyContinue
@@ -59,13 +63,15 @@ if ($skipOllama) {
         
         if ($ollamaProcess) {
             Write-Host "OK Ollama is already running" -ForegroundColor Green
-        } else {
+        }
+        else {
             Write-Host "Starting Ollama..."
             Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden
             Start-Sleep -Seconds 3
             Write-Host "OK Ollama started (http://localhost:11434)" -ForegroundColor Green
         }
-    } else {
+    }
+    else {
         Write-Host "WARNING: Ollama not detected, skipping" -ForegroundColor Yellow
         Write-Host "  To use local AI models, install Ollama: https://ollama.ai" -ForegroundColor Gray
     }
@@ -73,7 +79,32 @@ if ($skipOllama) {
 
 Write-Host ""
 
-# 2. Start Backend API (FastAPI)
+# 2. Start Database (if specified)
+if (-not [string]::IsNullOrEmpty($DbContainer)) {
+    Write-Host "[Optional] Starting Database Container ($DbContainer)..." -ForegroundColor Blue
+    if (Get-Command docker -ErrorAction SilentlyContinue) {
+        $status = docker ps -a --filter "name=^/${DbContainer}$" --format "{{.Status}}"
+        if ($status) {
+            if ($status -match "Up") {
+                Write-Host "OK Database container is already running" -ForegroundColor Green
+            }
+            else {
+                Write-Host "Starting container..."
+                docker start $DbContainer
+                Write-Host "OK Database container started" -ForegroundColor Green
+            }
+        }
+        else {
+            Write-Host "WARNING: Container '$DbContainer' not found" -ForegroundColor Yellow
+        }
+    }
+    else {
+        Write-Host "WARNING: Docker not found" -ForegroundColor Yellow
+    }
+    Write-Host ""
+}
+
+# 3. Start Backend API (FastAPI)
 Write-Host "[2/3] Starting Backend API (FastAPI)..." -ForegroundColor Blue
 
 $backendPath = Join-Path $PSScriptRoot "backend"

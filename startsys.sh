@@ -27,6 +27,8 @@ show_help() {
     echo "  ./startsys.sh              # 啟動所有服務"
     echo "  ./startsys.sh --help       # 顯示說明"
     echo "  ./startsys.sh --skip-ollama # 只啟動前後端，不啟動 Ollama"
+    echo "  ./startsys.sh postgres-db   # 啟動指定名稱的資料庫容器"
+    echo "  ./startsys.sh --skip-ollama postgres-db # 組合使用"
     echo ""
     echo "服務說明:"
     echo "  • 後端 API (FastAPI)    - http://127.0.0.1:8000"
@@ -52,9 +54,15 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         *)
-            echo "未知選項: $1"
-            echo "使用 -h 或 --help 查看說明"
-            exit 1
+            # 假設非 flag 的參數是資料庫容器名稱
+            if [[ "$1" == -* ]]; then
+                echo "未知選項: $1"
+                echo "使用 -h 或 --help 查看說明"
+                exit 1
+            else
+                DB_CONTAINER_NAME="$1"
+                shift
+            fi
             ;;
     esac
 done
@@ -85,7 +93,30 @@ else
     fi
 fi
 
+
+
 echo ""
+
+# 2. 啟動資料庫 (如果有指定容器名稱)
+if [ -n "$DB_CONTAINER_NAME" ]; then
+    echo -e "${BLUE}[2/3] 啟動資料庫容器 ($DB_CONTAINER_NAME)...${NC}"
+    if command -v docker &> /dev/null; then
+        if docker ps -a --format '{{.Names}}' | grep -Eq "^${DB_CONTAINER_NAME}$"; then
+            if docker ps --format '{{.Names}}' | grep -Eq "^${DB_CONTAINER_NAME}$"; then
+                 echo -e "${GREEN}✓ 資料庫容器 $DB_CONTAINER_NAME 已在運行中${NC}"
+            else
+                 echo "正在啟動 docker 容器..."
+                 docker start "$DB_CONTAINER_NAME"
+                 echo -e "${GREEN}✓ 資料庫容器啟動完成${NC}"
+            fi
+        else
+            echo -e "${YELLOW}⚠ 找不到名稱為 $DB_CONTAINER_NAME 的容器${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠ 未檢測到 Docker，無法啟動資料庫${NC}"
+    fi
+    echo ""
+fi
 
 # 2. 啟動後端 API (FastAPI)
 echo -e "${BLUE}[2/3] 啟動後端 API (FastAPI)...${NC}"

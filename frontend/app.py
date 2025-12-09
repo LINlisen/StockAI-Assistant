@@ -34,7 +34,7 @@ cookies = EncryptedCookieManager(
 if not cookies.ready():
     st.stop()
 
-def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color="#BB86FC", key_levels=None):
+def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color="#BB86FC", key_levels=None, show_ma=None, show_bb=True, show_vol=True):
     """
     建立互動式 K 線圖，包含：
     - Hover 顯示完整價格資訊
@@ -47,19 +47,27 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
         stock_id: 股票代號
         chart_style: 圖表配色方案
         drawing_color: 畫線顏色 (預設亮紫色)
+        key_levels: 關鍵價位
+        show_ma: 要顯示的均線列表
+        show_bb: 是否顯示布林通道
+        show_vol: 是否顯示成交量
     """
-    # 計算均線（只計算不存在的）
-    if 'MA5' not in df.columns:
-        df['MA5'] = df['Close'].rolling(window=5).mean()
-    if 'MA10' not in df.columns:
-        df['MA10'] = df['Close'].rolling(window=10).mean()
-    if 'MA20' not in df.columns:
-        df['MA20'] = df['Close'].rolling(window=20).mean()
-    if 'MA60' not in df.columns:
-        df['MA60'] = df['Close'].rolling(window=60).mean()
+    if show_ma is None:
+        show_ma = ['MA5', 'MA10', 'MA20', 'MA60']
+
+    # 計算均線（只計算需要的）
+    for ma in show_ma:
+        if ma == 'MA5' and 'MA5' not in df.columns:
+            df['MA5'] = df['Close'].rolling(window=5).mean()
+        elif ma == 'MA10' and 'MA10' not in df.columns:
+            df['MA10'] = df['Close'].rolling(window=10).mean()
+        elif ma == 'MA20' and 'MA20' not in df.columns:
+            df['MA20'] = df['Close'].rolling(window=20).mean()
+        elif ma == 'MA60' and 'MA60' not in df.columns:
+            df['MA60'] = df['Close'].rolling(window=60).mean()
     
     # 建立子圖：主圖 (K線+均線) + 副圖 (成交量)
-    has_volume = 'Volume' in df.columns
+    has_volume = 'Volume' in df.columns and show_vol
     
     if has_volume:
         fig = make_subplots(
@@ -121,7 +129,7 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
     }
     
     for ma_name, color in ma_colors.items():
-        if ma_name in df.columns:  # 只繪製存在的均線
+        if ma_name in df.columns and ma_name in show_ma:  # 只繪製存在的均線
             fig.add_trace(
                 go.Scatter(
                     x=df.index,
@@ -134,7 +142,7 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
             )
 
     # 加入布林通道 (如果有資料)
-    if 'Upper' in df.columns and 'Lower' in df.columns:
+    if show_bb and 'Upper' in df.columns and 'Lower' in df.columns:
         # 上軌
         fig.add_trace(
             go.Scatter(
@@ -569,6 +577,19 @@ def analysis_page():
             value="#BB86FC",  # 亮紫色
             help="選擇繪製支撐壓力線的顏色"
         )
+
+        st.divider()
+        st.write("📈 圖表顯示設定")
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            show_ma_list = st.multiselect(
+                "顯示均線",
+                ['MA5', 'MA10', 'MA20', 'MA60'],
+                default=['MA5', 'MA10', 'MA20', 'MA60']
+            )
+        with col_c2:
+            show_bb_check = st.checkbox("顯示布林通道", value=True)
+            show_vol_check = st.checkbox("顯示成交量", value=True)
         
         run_btn = st.button("🚀 開始分析", type="primary")
 
@@ -641,7 +662,7 @@ def analysis_page():
                                 
                                 
                                 # 使用新的互動式圖表函數
-                                fig = create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color, key_levels=key_levels)
+                                fig = create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_color, key_levels=key_levels, show_ma=show_ma_list, show_bb=show_bb_check, show_vol=show_vol_check)
                                 
                                 # 使用 st.write 顯示 Plotly 圖表（比 st.plotly_chart 更穩定）
                                 st.write(fig)
