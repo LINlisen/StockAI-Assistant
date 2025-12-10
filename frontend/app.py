@@ -1418,6 +1418,126 @@ def auto_backtest_page():
                         )
                     else:
                         st.info("此組合在回測期間選擇觀望，沒有進行任何交易。")
+
+# ==========================================
+#  頁面 H: 籌碼分析頁面 (新增)
+# ==========================================
+def chips_page():
+    st.title("💰 籌碼分析 (Chip Analysis)")
+    
+    # 建立 Tabs
+    tab1, tab2, tab3 = st.tabs(["📊 個股籌碼詳情", "👽 外資買賣超排行", "🏦 投信買賣超排行"])
+    
+    # --- Tab 1: 個股籌碼 ---
+    with tab1:
+        st.subheader("個股籌碼追蹤")
+        
+        # 搜尋欄位
+        col1, col2 = st.columns([1, 3])
+        with col1:
+             stock_input = st.text_input("輸入股票代號", "2330", key="chip_stock_input")
+        with col2:
+             st.write("") # Spacer
+             st.write("") 
+             # 使用 session_state 避免重新整理後消失，或者直接綁定 button
+             search_btn = st.button("查詢籌碼", type="primary")
+
+        if search_btn or stock_input:
+            try:
+                # 呼叫後端 (預設抓 10 天)
+                res = requests.get(f"{BACKEND_URL}/api/chips/{stock_input}?days=10")
+                
+                if res.status_code == 200:
+                    chip_data = res.json()
+                    
+                    if chip_data:
+                        # 轉為 DataFrame
+                        df_chip = pd.DataFrame(chip_data)
+                        # 先轉為 datetime 物件以便排序或計算
+                        df_chip['DateObj'] = pd.to_datetime(df_chip['date'])
+                        # 格式化為純日期字串 (YYYY-MM-DD) 以去除時間部分
+                        df_chip['Date'] = df_chip['DateObj'].dt.strftime('%Y-%m-%d')
+                        df_chip.set_index('Date', inplace=True)
+                        
+                        # 計算累積買賣超
+                        acc_foreign = df_chip['foreign_net'].sum()
+                        acc_trust = df_chip['trust_net'].sum()
+                        acc_dealer = df_chip['dealer_net'].sum()
+                        
+                        # 顯示 Metric
+                        c1, c2, c3 = st.columns(3)
+                        days_count = len(df_chip)
+                        c1.metric(f"外資累積買賣超 ({days_count}日)", f"{acc_foreign:,} 張", delta=f"{acc_foreign} 張")
+                        c2.metric(f"投信累積買賣超 ({days_count}日)", f"{acc_trust:,} 張", delta=f"{acc_trust} 張")
+                        c3.metric(f"自營商累積買賣超 ({days_count}日)", f"{acc_dealer:,} 張", delta=f"{acc_dealer} 張")
+                        
+                        st.subheader(f"{stock_input} 三大法人買賣超趨勢")
+                        
+                        # 繪圖 (使用 Bar Chart)
+                        # Streamlit 的 bar_chart 可以接受多欄位
+                        st.bar_chart(df_chip[['foreign_net', 'trust_net', 'dealer_net']])
+                    else:
+                        st.warning("查無資料，系統正在嘗試補抓最近的數據，請稍後再試。")
+                else:
+                    st.error(f"查詢失敗: {res.text}")
+                    
+            except Exception as e:
+                st.error(f"連線錯誤: {e}")
+
+    # --- Tab 2: 外資 Top 50 ---
+    with tab2:
+        st.subheader("👽 外資買賣超 Top 50 (模擬數據)")
+        st.caption("統計今日外資買賣超金額/張數排行")
+        
+        filter_col, _ = st.columns([1, 3])
+        with filter_col:
+             rank_type = st.selectbox("排行依據", ["買超張數", "賣超張數", "買超金額", "賣超金額"], key="foreign_rank_type")
+        
+        # 模擬 Top 50 表格
+        top50_data = []
+        for i in range(1, 51):
+            top50_data.append({
+                "排名": i,
+                "代號": f"{2300+i}",
+                "名稱": f"測試股{i}",
+                "買賣超張數": np.random.randint(1000, 50000),
+                "連續買賣天數": np.random.randint(1, 10),
+                "累積買賣超 (5日)": np.random.randint(5000, 100000)
+            })
+        df_foreign = pd.DataFrame(top50_data)
+        
+        st.dataframe(
+            df_foreign,
+            column_config={
+                "排名": st.column_config.NumberColumn(format="#%d"),
+                "買賣超張數": st.column_config.NumberColumn(format="%d 張"),
+                "連續買賣天數": st.column_config.NumberColumn(format="%d 天"),
+                "累積買賣超 (5日)": st.column_config.NumberColumn(format="%d 張"),
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+    # --- Tab 3: 投信 Top 50 ---
+    with tab3:
+        st.subheader("🏦 投信買賣超 Top 50 (模擬數據)")
+        st.caption("統計今日投信買賣超金額/張數排行")
+        
+        # 模擬 Top 50 表格 (結構類似)
+        df_trust = df_foreign.copy() # 暫時複製外資的結構
+        df_trust["名稱"] = [f"投信股{i}" for i in range(1, 51)]
+        
+        st.dataframe(
+            df_trust,
+            column_config={
+                "排名": st.column_config.NumberColumn(format="#%d"),
+                "買賣超張數": st.column_config.NumberColumn(format="%d 張"),
+                "連續買賣天數": st.column_config.NumberColumn(format="%d 天"),
+                "累積買賣超 (5日)": st.column_config.NumberColumn(format="%d 張"),
+            },
+            use_container_width=True,
+            hide_index=True
+        )
 # ==========================================
 #  主導航控制器 (Navigation)
 # ==========================================
@@ -1428,7 +1548,7 @@ def main_controller():
         
         # 頁面切換選單
         page = st.radio("前往頁面", 
-            ["📈 操盤分析", "🔍 智慧選股", "🔙 智能回測", "🤖 自動化回測", "📊 回測儀表板", "📜 歷史紀錄", "👤 個人設定"]
+            ["📈 操盤分析", "💰 籌碼分析", "🔍 智慧選股", "🔙 智能回測", "🤖 自動化回測", "📊 回測儀表板", "📜 歷史紀錄", "👤 個人設定"]
         )
         
         st.divider()
@@ -1446,6 +1566,8 @@ def main_controller():
     # 根據選單顯示對應頁面
     if page == "📈 操盤分析":
         analysis_page()
+    elif page == "💰 籌碼分析":  # <--- 新增路由
+        chips_page()
     elif page == "🔍 智慧選股":  # <--- 新增路由
          screener_page()
     elif page == "📜 歷史紀錄":  # <--- 新增路由

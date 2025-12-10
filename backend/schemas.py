@@ -101,3 +101,16 @@ class ScreenRequest(BaseModel):
     scope: str = "TW50"  # "TW50", "Finance", "Custom"
     
     custom_tickers: Optional[List[str]] = None
+
+class ChipDailyResponse(BaseModel):
+    date: datetime
+    foreign_net: int
+    trust_net: int
+    dealer_net: int
+    
+    # 也可以加上買賣張數，視前端需求
+    foreign_buy: int
+    foreign_sell: int
+    
+    class Config:
+        from_attributes = True

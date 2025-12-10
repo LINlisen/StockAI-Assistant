@@ -66,3 +66,32 @@ class BacktestRecord(Base):
     
     # 建立時間 (用來判斷快取是否過期，例如超過 1 天就重跑)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class ChipDaily(Base):
+    """
+    籌碼日報表 (chip_daily)
+    儲存每日個股的三大法人買賣超數據
+    資料來源: TWSE T86
+    """
+    __tablename__ = "chip_daily"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(DateTime, index=True)         # 日期 (YYYY-MM-DD)
+    stock_id = Column(String(10), index=True)   # 股票代號 (2330)
+    
+    # 外資 (Foreign Investors)
+    foreign_buy = Column(Float, default=0)      # 買進股數
+    foreign_sell = Column(Float, default=0)     # 賣出股數
+    foreign_net = Column(Float, default=0)      # 買賣超股數 (Net)
+    
+    # 投信 (Investment Trust)
+    trust_buy = Column(Float, default=0)
+    trust_sell = Column(Float, default=0)
+    trust_net = Column(Float, default=0)
+    
+    # 自營商 (Dealer) - 包含自行買賣與避險
+    dealer_buy = Column(Float, default=0)
+    dealer_sell = Column(Float, default=0)
+    dealer_net = Column(Float, default=0)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -12,6 +12,7 @@ import schemas
 from services.stock_service import StockService
 from services.ai_service import AIService
 from services.backtest_service import BacktestService
+from services.chip_service import ChipService
 
 # 初始化 DB
 models.Base.metadata.create_all(bind=engine)
@@ -22,6 +23,7 @@ app = FastAPI()
 stock_service = StockService()
 ai_service = AIService()
 backtest_service = BacktestService()
+chip_service = ChipService()
 
 # --- 工具函式：SHA256 加密 ---
 def hash_password(password: str) -> str:
@@ -216,5 +218,14 @@ def get_backtest_history(stock_id: str = None, db: Session = Depends(get_db)):
 def get_backtest_stock_list(db: Session = Depends(get_db)):
     try:
         return backtest_service.get_tested_stocks(db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chips/{stock_id}", response_model=List[schemas.ChipDailyResponse])
+def get_stock_chips(stock_id: str, days: int = 30, db: Session = Depends(get_db)):
+    try:
+        service = ChipService(db)
+        data = service.get_stock_chip(stock_id, days)
+        return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
