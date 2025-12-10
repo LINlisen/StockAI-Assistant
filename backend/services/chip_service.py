@@ -160,12 +160,23 @@ class ChipService:
             ChipDaily.stock_id == stock_id
         ).order_by(ChipDaily.date.desc()).first()
         
-        # 如果完全沒資料，或資料太舊，嘗試抓個幾天 (簡易補資料機制)
-        if not recent:
-            print(f"No chip data for {stock_id}, fetching last 10 days...")
-            # 抓最近 10 個交易日 (简单回推，不考虑假日，fetch 会自己 fail)
+        today = datetime.now()
+        start_date = today - timedelta(days=days)
+        
+        # 先查詢目前 DB 有幾筆
+        existing_count = self.db.query(ChipDaily).filter(
+            ChipDaily.stock_id == stock_id,
+            ChipDaily.date >= start_date
+        ).count()
+        
+        # 如果資料太少 (例如少於 5 筆)，嘗試強制補抓最近 10 天
+        # 這可以解決 "只有 3 天" 的問題 (因為之前只抓 range(5) 且遇到週末)
+        if existing_count < 5:
+            print(f"Data insufficient for {stock_id} (count={existing_count}), forcing fetch last 10 days...")
             for i in range(10):
                 d = datetime.now() - timedelta(days=i)
+                # 這裡要避免重複 fetch 已經有的日期嗎? 
+                # update_daily_data 內部有 check existing，所以多跑幾次沒關係，只是會花時間 request
                 self.update_daily_data(d)
         
         # 查詢
