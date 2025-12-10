@@ -3,7 +3,6 @@ version: '3.8'
 services:
   postgres:
     #build: ./db/.
-    #image: taipower/custom-postgres:1.0 
     image: postgres:13
     shm_size: 1G
     container_name: postgres-container-custom-stockai

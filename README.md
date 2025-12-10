@@ -67,6 +67,7 @@ pip install -r requirements.txt
 
 我們提供了自動化啟動腳本，可同時啟動後端、前端與 Ollama 服務。
 記得先進入 venv
+然後要開資料庫
 
 #### Windows (PowerShell)：
 

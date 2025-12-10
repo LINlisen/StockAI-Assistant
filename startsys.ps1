@@ -136,7 +136,32 @@ if (-not [string]::IsNullOrEmpty($DbContainer)) {
                 }
             }
             else {
-                Write-Host "WARNING: Container '$DbContainer' not found" -ForegroundColor Yellow
+                # Update: If container not found, try to run docker-compose
+                Write-Host "WARNING: Container '$DbContainer' not found." -ForegroundColor Yellow
+                
+                $composeFile = Join-Path $PSScriptRoot "dockerpg.yml"
+                if (Test-Path $composeFile) {
+                    Write-Host "Found '$composeFile'. Attempting to create and start container with docker-compose..." -ForegroundColor Blue
+                    
+                    # Run docker-compose
+                    # Note: We use 'docker compose' (V2) or 'docker-compose' (V1)
+                    if (Get-Command "docker-compose" -ErrorAction SilentlyContinue) {
+                        docker-compose -f $composeFile up -d
+                    }
+                    else {
+                        docker compose -f $composeFile up -d
+                    }
+                    
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "OK Database container created and started via docker-compose" -ForegroundColor Green
+                    }
+                    else {
+                        Write-Host "ERROR: Failed to start with docker-compose" -ForegroundColor Red
+                    }
+                }
+                else {
+                    Write-Host "ERROR: '$composeFile' not found. Cannot auto-create container." -ForegroundColor Red
+                }
             }
         }
     }
