@@ -43,6 +43,7 @@ show_help() {
 
 # 參數處理
 SKIP_OLLAMA=false
+DB_CONTAINER_NAME="postgres-container-custom-stockai"
 
 while [[ $# -gt 0 ]]; do
     case $1 in

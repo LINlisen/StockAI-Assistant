@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Position = 0)]
-    [string]$DbContainer,
+    [string]$DbContainer = "postgres-container-custom-stockai",
     [switch]$h,
     [switch]$help,
     [switch]$skipOllama
@@ -80,26 +80,68 @@ else {
 Write-Host ""
 
 # 2. Start Database (if specified)
+# 2. Start Database (if specified)
 if (-not [string]::IsNullOrEmpty($DbContainer)) {
-    Write-Host "[Optional] Starting Database Container ($DbContainer)..." -ForegroundColor Blue
+    Write-Host "[2/3] Starting Database Container ($DbContainer)..." -ForegroundColor Blue
+    
     if (Get-Command docker -ErrorAction SilentlyContinue) {
-        $status = docker ps -a --filter "name=^/${DbContainer}$" --format "{{.Status}}"
-        if ($status) {
-            if ($status -match "Up") {
-                Write-Host "OK Database container is already running" -ForegroundColor Green
-            }
-            else {
-                Write-Host "Starting container..."
-                docker start $DbContainer
-                Write-Host "OK Database container started" -ForegroundColor Green
-            }
+        # --- Check Docker Daemon Status ---
+        $dockerDaemonReady = $false
+        docker info > $null 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            $dockerDaemonReady = $true
         }
         else {
-            Write-Host "WARNING: Container '$DbContainer' not found" -ForegroundColor Yellow
+            Write-Host "Docker daemon is not running. Attempting to start Docker Desktop..." -ForegroundColor Yellow
+            $dockerPath = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+            
+            if (Test-Path $dockerPath) {
+                Start-Process -FilePath $dockerPath
+                Write-Host "Launched Docker Desktop. Waiting for engine to initialize (this may take a minute)..." -ForegroundColor Gray
+                
+                # Wait loop (up to 90 seconds)
+                $retries = 90
+                while ($retries -gt 0) {
+                    Write-Host "." -NoNewline -ForegroundColor Gray
+                    Start-Sleep -Seconds 2
+                    
+                    docker info > $null 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "`nDocker Engine is ready!" -ForegroundColor Green
+                        $dockerDaemonReady = $true
+                        break
+                    }
+                    $retries -= 2
+                }
+                if (-not $dockerDaemonReady) {
+                    Write-Host "`nTimed out waiting for Docker Engine." -ForegroundColor Red
+                }
+            }
+            else {
+                Write-Host "Could not find Docker Desktop at '$dockerPath'. Please start it manually." -ForegroundColor Red
+            }
+        }
+
+        # --- Start Container ---
+        if ($dockerDaemonReady) {
+            $status = docker ps -a --filter "name=^/${DbContainer}$" --format "{{.Status}}"
+            if ($status) {
+                if ($status -match "Up") {
+                    Write-Host "OK Database container is already running" -ForegroundColor Green
+                }
+                else {
+                    Write-Host "Starting container..."
+                    docker start $DbContainer
+                    Write-Host "OK Database container started" -ForegroundColor Green
+                }
+            }
+            else {
+                Write-Host "WARNING: Container '$DbContainer' not found" -ForegroundColor Yellow
+            }
         }
     }
     else {
-        Write-Host "WARNING: Docker not found" -ForegroundColor Yellow
+        Write-Host "WARNING: Docker command not found" -ForegroundColor Yellow
     }
     Write-Host ""
 }
