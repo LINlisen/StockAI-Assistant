@@ -1029,26 +1029,34 @@ def backtest_page():
 #  頁面 F: 回測儀表板 (新增)
 # ==========================================
 def backtest_dashboard_page():
-    stock_options = []
+    stock_ids = []
     try:
         res = requests.get(f"{BACKEND_URL}/api/backtest/stocks")
         if res.status_code == 200:
-            stock_options = res.json()
+            stock_ids = res.json()
     except Exception as e:
         st.error(f"無法取得股票清單: {e}")
 
     # --- 2. 顯示下拉選單 ---
-    if not stock_options:
+    if not stock_ids:
         st.warning("⚠️ 目前資料庫中沒有任何回測紀錄，請先去「智能回測」頁面跑幾次。")
         return
 
+    display_options = [get_stock_display_name(sid) for sid in stock_ids]
+
     col1, col2 = st.columns([3, 1])
     with col1:
-        # 改用 selectbox，預設選第一個
-        target_stock = st.selectbox("選擇已回測的股票", stock_options)
+        # 這裡的選項變成 "2330 台積電", "2603 長榮" ...
+        selected_display = st.selectbox("選擇已回測的股票", display_options)
+        
+        # 🔥 修改重點 2: 從顯示名稱中提取回純代號 (傳給後端用)
+        # 假設格式是 "2330 台積電"，用 split 取第一個部分
+        target_stock = selected_display.split(" ")[0]
     
     with col2:
-        # 其實 selectbox 選了就會變，按鈕可以當作「強制重新整理」
+        # 按鈕為了排版對齊
+        st.write("") 
+        st.write("")
         refresh_btn = st.button("🔄 重新載入", type="secondary")
 
     # 使用 session_state 暫存該股票的詳細紀錄
