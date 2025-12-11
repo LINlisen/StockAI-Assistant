@@ -6,7 +6,7 @@ import mplfinance as mpf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import time
-from stock_mapping import get_stock_name, get_stock_symbol
+from stock_mapping import get_stock_name, get_stock_symbol, get_stock_display_name
 from streamlit_cookies_manager import EncryptedCookieManager
 import re
 import json
@@ -631,6 +631,7 @@ def analysis_page():
                 payload = {
                     "user_id": user.get('id'),
                     "stock_id": stock_id,
+                    "stock_name": stock_name,
                     "mode": mode,
                     "cost": cost,
                     "api_key": api_key_input,
@@ -649,8 +650,10 @@ def analysis_page():
                     
                     # --- 顯示結果 ---
                     col1, col2 = st.columns(2)
+                    col1.metric("標的", stock_name)
                     col1.metric("現價", f"{data['current_price']:.2f}")
                     col1.metric("趨勢", data['trend'])
+                    
                     
                     st.subheader(f"🧠 AI 分析報告 ({selected_model})")
                     st.info(data['ai_analysis'])

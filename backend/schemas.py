@@ -6,6 +6,7 @@ from datetime import datetime
 class StockAnalysisRequest(BaseModel):
     user_id: Optional[int] = None # 保持相容性，設為 Optional
     stock_id: str
+    stock_name: str
     mode: str
     cost: float
     api_key: Optional[str] = None

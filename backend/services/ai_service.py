@@ -56,7 +56,7 @@ class AIService:
            print(f"Fetch models error: {e}")
            return []
 
-    def get_analysis(self, api_key: str, stock_id: str, mode: str, cost: float, context_data: str, provider: str = "gemini", model_name: str = "gemini-1.5-flash", ollama_url: str = None, prompt_style: str = "standard"):
+    def get_analysis(self, api_key: str, stock_id: str, stock_name: str, mode: str, cost: float, context_data: str, provider: str = "gemini", model_name: str = "gemini-1.5-flash", ollama_url: str = None, prompt_style: str = "standard"):
         """
         呼叫 AI 進行操盤分析 (回傳文字報告)
         """
@@ -74,7 +74,7 @@ class AIService:
             {persona}
 
             請分析以下股票數據。
-            參數: 代號 {stock_id}, 方向 {mode}, 成本 {cost}
+            參數: 代號 {stock_id}, 股票名稱 {stock_name} 方向 {mode}, 成本 {cost}
             數據: {context_data}
             
             任務:

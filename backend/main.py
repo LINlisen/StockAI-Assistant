@@ -88,6 +88,7 @@ def analyze_stock(req: schemas.StockAnalysisRequest, db: Session = Depends(get_d
         ai_result = ai_service.get_analysis(
              api_key=req.api_key,
             stock_id=req.stock_id,
+            stock_name = req.stock_name,
             mode=req.mode,
             cost=req.cost,
             context_data=summary["context_str"],
