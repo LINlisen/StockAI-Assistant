@@ -799,7 +799,7 @@ def screener_page():
         # 顯示文字輸入框
         user_input = st.text_area(
             "輸入股票代號 (用逗號或空白分隔)", 
-            value="1815 3715 2449 2481 2492 2375 3189 5314 2228 1802 2374 3706 3711 6191 8021 1303 3037 2337 8112 5340 1605 5328 1504 2344 2329 8043 2455 3006 3305 2634 3005 2408 6770 5392 2313 8271 3543 2324 1409 3231 3016 3707 6485 8088 6282 2354 2457 2609 2540 2542 2520 2359 2478 2317 2454 0052 2880 1313 2801 2884 2308 2383 4931 2327 2374 3231 3189 3013",
+            value="1815,3715,2449,2481,2492,2375,3189,5314,2228,1802,2374,3706,3711,6191,8021,1303,3037,2337,8112,5340,1605,5328,1504,2344,2329,8043,2455,3006,3305,2634,3005,2408,6770,5392,2313,8271,3543,2324,1409,3231,3016,3707,6485,8088,6282,2354,2457,2609,2540,2542,2520,2359,2478,2317,2454,0052,2880,1313,2801,2884,2308,2383,4931,2327,2374,3231,3189,3013",
             help="例如: 2330 2317 2454"
         )
         # 解析使用者輸入
@@ -1549,6 +1549,81 @@ def chips_page():
             use_container_width=True,
             hide_index=True
         )
+def auto_report_page():
+    st.title("📑 智能投資週報生成器")
+    st.info("💡 系統將自動篩選股票 -> 尋找最佳回測模型 -> 進行 AI 分析 -> 生成 PDF 報告。")
+
+    # 設定區
+    with st.expander("⚙️ Ollama 設定", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            ollama_url = st.text_input("Ollama URL", value="http://localhost:11434", help="雲端請填 Ngrok 網址")
+
+    # 輸入自訂清單
+    st.subheader("1. 輸入觀察名單")
+    default_list = "2330, 2454, 2603, 3034, 2881"
+    user_input = st.text_area("股票代號 (用逗號分隔)", value=default_list, height=100)
+    
+    # 解析輸入
+    custom_tickers = []
+    if user_input:
+        import re
+        raw = re.split(r'[,\s\n]+', user_input)
+        custom_tickers = [x.strip() for x in raw if x.strip()]
+
+    # 選擇篩選策略
+    st.subheader("2. 選擇篩選條件 (通過條件才會被分析)")
+    c1, c2, c3 = st.columns(3)
+    s1 = c1.checkbox("MA20 突破季線", value=True)
+    s2 = c2.checkbox("KD 黃金交叉")
+    s3 = c3.checkbox("爆量長紅")
+    
+    selected_strategies = []
+    if s1: selected_strategies.append("MA_Cross_Major")
+    if s2: selected_strategies.append("KD_Golden_Cross")
+    if s3: selected_strategies.append("Volume_Explosion")
+
+    # 執行按鈕
+    if st.button("🚀 生成 PDF 報告", type="primary"):
+        if not custom_tickers:
+            st.error("請輸入股票代號")
+            return
+            
+        status_text = st.empty()
+        progress_bar = st.progress(0)
+        
+        try:
+            status_text.write("⏳ 正在篩選股票並進行多模型 AI 分析，這可能需要幾分鐘...")
+            progress_bar.progress(10)
+            
+            # 準備請求
+            payload = {
+                "strategies": selected_strategies,
+                "scope": "Custom",
+                "custom_tickers": custom_tickers,
+                "ollama_url": ollama_url
+            }
+            
+            # 呼叫後端 (response.content 就是 PDF 二進位資料)
+            res = requests.post(f"{BACKEND_URL}/api/report/generate", json=payload)
+            
+            if res.status_code == 200:
+                progress_bar.progress(100)
+                status_text.success("✅ 報告生成完畢！")
+                
+                # 顯示下載按鈕
+                st.download_button(
+                    label="📥 下載分析報告 (PDF)",
+                    data=res.content,
+                    file_name="ai_stock_report.pdf",
+                    mime="application/pdf"
+                )
+            else:
+                st.error(f"生成失敗: {res.text}")
+                
+        except Exception as e:
+            st.error(f"連線錯誤: {e}")
+
 # ==========================================
 #  主導航控制器 (Navigation)
 # ==========================================
@@ -1559,7 +1634,7 @@ def main_controller():
         
         # 頁面切換選單
         page = st.radio("前往頁面", 
-            ["📈 操盤分析", "💰 籌碼分析", "🔍 智慧選股", "🔙 智能回測", "🤖 自動化回測", "📊 回測儀表板", "📜 歷史紀錄", "👤 個人設定"]
+            ["📈 操盤分析", "💰 籌碼分析", "📑 生成投資報告", "🔍 智慧選股", "🔙 智能回測", "🤖 自動化回測", "📊 回測儀表板", "📜 歷史紀錄", "👤 個人設定"]
         )
         
         st.divider()
@@ -1577,6 +1652,8 @@ def main_controller():
     # 根據選單顯示對應頁面
     if page == "📈 操盤分析":
         analysis_page()
+    elif page == "📑 生成投資報告":
+        auto_report_page()
     elif page == "💰 籌碼分析":  # <--- 新增路由
         chips_page()
     elif page == "🔍 智慧選股":  # <--- 新增路由

@@ -13,3 +13,4 @@ streamlit
 requests
 plotly
 streamlit-cookies-manager
+reportlab

@@ -1,5 +1,5 @@
 # backend/main.py
-from typing import List
+from typing import List, Optional
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 import json
@@ -13,18 +13,21 @@ from services.stock_service import StockService
 from services.ai_service import AIService
 from services.backtest_service import BacktestService
 from services.chip_service import ChipService
+from fastapi.responses import FileResponse
+from services.report_service import ReportService
 
 # 初始化 DB
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+
 # 初始化 Service 實例
 stock_service = StockService()
 ai_service = AIService()
 backtest_service = BacktestService()
 chip_service = ChipService()
-
+report_service = ReportService()
 # --- 工具函式：SHA256 加密 ---
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
@@ -229,4 +232,19 @@ def get_stock_chips(stock_id: str, days: int = 30, db: Session = Depends(get_db)
         data = service.get_stock_chip(stock_id, days)
         return data
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+class AutoReportRequest(schemas.ScreenRequest):
+    api_key: Optional[str] = None
+    ollama_url: Optional[str] = None
+
+@app.post("/api/report/generate")
+def generate_report(req: schemas.AutoReportRequest, db: Session = Depends(get_db)):
+    try:
+        filename = report_service.run_comprehensive_analysis(db, req)
+        
+        return FileResponse(filename, filename="stock_report.pdf", media_type="application/pdf")
+        
+    except Exception as e:
+        print(f"Report Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
