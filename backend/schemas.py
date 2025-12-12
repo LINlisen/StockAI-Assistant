@@ -6,6 +6,7 @@ from datetime import datetime
 class StockAnalysisRequest(BaseModel):
     user_id: Optional[int] = None # 保持相容性，設為 Optional
     stock_id: str
+    stock_name: str
     mode: str
     cost: float
     api_key: Optional[str] = None
@@ -114,3 +115,12 @@ class ChipDailyResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+class AutoReportRequest(BaseModel):
+    strategies: List[str] 
+    scope: str = "Custom"
+    custom_tickers: Optional[List[str]] = None
+    
+    # 🔥 修改：移除 api_key，加入 ollama 模型設定
+    ollama_url: str = "http://localhost:11434"
+    ollama_model_name: str = "gpt-oss:20b" # 預設模型

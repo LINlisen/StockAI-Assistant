@@ -3,6 +3,8 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
+from sqlalchemy.orm import Session
+from utils.stock_mapping import get_stock_name
 
 class StockService:
     # 預定義一份掃描清單 (這裡以台灣50成分股為例，可自行擴充)
@@ -168,11 +170,11 @@ class StockService:
         # 2. 逐一檢查
         for stock_id, df in stock_data.items():
             matched_strats = self.check_strategies(df, strategies)
-            
+            stock_name = get_stock_name(stock_id)
             if matched_strats:
                 results.append({
                     "stock_id": stock_id,
-                    "name": stock_id, # 暫時用代號當名稱
+                    "name": stock_name, # 暫時用代號當名稱
                     "close": float(df.iloc[-1]['Close']),
                     "matched_strategies": matched_strats
                 })
