@@ -64,6 +64,7 @@ class StockService:
         # --- 計算基礎指標 ---
         # 均線
         ma5 = df['Close'].rolling(5).mean()
+        ma10 = df['Close'].rolling(10).mean()
         ma20 = df['Close'].rolling(20).mean()
         ma60 = df['Close'].rolling(60).mean()   # 季線
         ma120 = df['Close'].rolling(120).mean() # 半年線
@@ -120,6 +121,29 @@ class StockService:
             # MA5 > MA20 > MA60
             if ma5.iloc[-1] > ma20.iloc[-1] > ma60.iloc[-1]:
                 matched.append("均線多頭排列")
+                
+        if "MA_Entanglement" in strategies:
+            # 取得最新的均線值
+            m5 = ma5.iloc[-1]
+            m10 = ma10.iloc[-1]
+            m20 = ma20.iloc[-1]
+            
+            # 確保數值有效 (非 NaN)
+            if pd.notna(m5) and pd.notna(m10) and pd.notna(m20):
+                # 計算三條線的最高與最低值
+                max_ma = max(m5, m10, m20)
+                min_ma = min(m5, m10, m20)
+                
+                # 計算乖離率：(最大值 - 最小值) / 最小值
+                # 設定糾結標準：差距在 2.5% 以內 (0.025)
+                entanglement_rate = (max_ma - min_ma) / min_ma
+                
+                # 額外條件：收盤價最好在均線糾結區之上 (代表蓄勢待發，而非跌破糾結)
+                price_above_ma = curr['Close'] >= min_ma
+                
+                if entanglement_rate <= 0.025 and price_above_ma:
+                    matched.append("5/10/20日均線糾結")
+
 
         return matched
 
