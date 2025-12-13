@@ -30,7 +30,7 @@ cd StockAI-Assistant
 
 ### 2. 安裝依賴套件
 
-建議使用虛擬環境 (Virtualenv)：
+建議使用虛擬環境：
 
 ```bash
 # 建立虛擬環境
@@ -66,8 +66,8 @@ pip install -r requirements.txt
 ### 🚀 方法一：一鍵啟動 (推薦)
 
 我們提供了自動化啟動腳本，可同時啟動後端、前端與 Ollama 服務。
-記得先進入 venv
-然後要開資料庫
+1. 先進入venv環境(如果有)，並確認套件已安裝(requirements.txt)
+2. 執行startsys檔案
 
 #### Windows (PowerShell)：
 
@@ -165,6 +165,12 @@ ollama serve
     *   前往「操盤分析」輸入股票代號 (如 2330)。
     *   前往「智慧選股」勾選策略進行掃描。
     *   前往「智能回測」測試您的交易策略。
+
+##  進階教學與排錯
+
+*   [📈 互動式 K 線圖操作指南](docs/CANDLESTICK_CHART_GUIDE.md): 詳細說明如何使用互動式圖表、畫線工具與查看技術指標。
+*   [🔄 智慧选股反向查询指南](docs/REVERSE_LOOKUP_GUIDE.md): 說明如何從选股結果快速跳轉至個股分析。
+*   [🐛 股票名稱顯示修正說明](docs/STOCK_NAME_FIX.md): 前端股票名稱顯示問題的修正紀錄與說明。
 
 ## 📂 專案結構
 
