@@ -621,100 +621,108 @@ def analysis_page():
     
 
     # --- 執行按鈕邏輯 ---
+    # --- 執行按鈕邏輯 ---
     if run_btn:
         # 檢查 Gemini Key
         if provider_code == "gemini" and not api_key_input:
             st.error("請輸入 API Key")
-            return
-            
-        with st.spinner(f"正在呼叫 {selected_model} ({provider_code}) 進行分析..."):
-            try:
-                payload = {
-                    "user_id": user.get('id'),
-                    "stock_id": stock_id,
-                    "stock_name": stock_name,
-                    "mode": mode,
-                    "cost": cost,
-                    "api_key": api_key_input,
+        else:
+            with st.spinner(f"正在呼叫 {selected_model} ({provider_code}) 進行分析..."):
+                try:
+                    payload = {
+                        "user_id": user.get('id'),
+                        "stock_id": stock_id,
+                        "stock_name": stock_name,
+                        "mode": mode,
+                        "cost": cost,
+                        "api_key": api_key_input,
+                        "provider": provider_code,
+                        "model_name": selected_model,
+                        "ollama_url": ollama_url,
+                        "prompt_style": prompt_style
+                    }
                     
-                    # 🔥 關鍵參數：傳送 provider, model_name, ollama_url
-                    "provider": provider_code,
-                    "model_name": selected_model,
-                    "ollama_url": ollama_url,
-                    "prompt_style": prompt_style
-                }
-                
-                res = requests.post(f"{BACKEND_URL}/api/analyze", json=payload)
-                
-                if res.status_code == 200:
-                    data = res.json()
+                    res = requests.post(f"{BACKEND_URL}/api/analyze", json=payload)
                     
-                    # --- 顯示結果 ---
-                    col1, col2 = st.columns(2)
-                    col1.metric("標的", stock_name)
-                    col1.metric("現價", f"{data['current_price']:.2f}")
-                    col1.metric("趨勢", data['trend'])
-                    
-                    
-                    st.subheader(f"🧠 AI 分析報告 ({selected_model})")
-                    st.info(data['ai_analysis'])
-                    
-                    # 🔗 Yahoo Finance 連結
-                    yahoo_url = f"https://tw.stock.yahoo.com/quote/{stock_id}.TW/technical-analysis"
-                    st.markdown(f"📊 [查看 Yahoo Finance 技術分析]({yahoo_url})")
-                    
-                    # 繪製互動式 K 線圖
-                    if data.get('technical_data'):
-                        try:
-                            raw = data['technical_data']
-                            df = pd.DataFrame(raw)
-                            df['Date'] = pd.to_datetime(df['Date'])
-                            df.set_index('Date', inplace=True)
-                            
-                            # 確保有 OHLC 資料
-                            required_cols = ['Open', 'High', 'Low', 'Close']
-                            missing_cols = [col for col in required_cols if col not in df.columns]
-                            key_levels = extract_key_levels(data['ai_analysis'])
-                            if key_levels:
-                                    k1, k2, k3 = st.columns(3)
-                                    k1.metric("AI 判斷壓力", key_levels['res'])
-                                    k2.metric("AI 判斷支撐", key_levels['sup'])
-                                    k3.metric("爆量轉折日", key_levels['date'])
-                            if missing_cols:
-                                st.error(f"❌ 缺少必要欄位: {missing_cols}")
-                                st.write("可用欄位:", df.columns.tolist())
-                            elif all(col in df.columns for col in required_cols):
-                                st.subheader("📈 互動式 K 線圖")
-                                st.caption("💡 提示：可使用滑鼠 hover 查看詳細資訊，點擊右上角工具列可繪製支撐壓力線")
-                                
-                                
-                                # 使用新的互動式圖表函數
-                                # 傳入所有選項，讓函數生成完整的圖表
-                                fig = create_interactive_candlestick_chart(
-                                    df, stock_id, chart_style, drawing_color, 
-                                    key_levels=key_levels, 
-                                    show_ma=default_ma, 
-                                    show_bb=default_bb, 
-                                    show_vol=default_vol
-                                )
-                                
-                                # 使用 st.write 顯示 Plotly 圖表（比 st.plotly_chart 更穩定）
-                                st.write(fig)
-                            else:
-                                # 如果沒有完整 OHLC 資料，顯示折線圖
-                                st.subheader("📈 收盤價走勢")
-                                st.line_chart(df['Close'])
-                        except Exception as e:
-                            st.error(f"❌ 圖表繪製錯誤: {str(e)}")
-                            st.write("錯誤詳情:", type(e).__name__)
-                            import traceback
-                            st.code(traceback.format_exc())
+                    if res.status_code == 200:
+                        # 成功獲取資料，存入 session_state
+                        st.session_state['analysis_result'] = res.json()
+                        st.session_state['analysis_stock_name'] = stock_name # 存名稱以備顯示
                     else:
-                        st.warning("⚠️ 後端未返回 technical_data")
+                        st.error(f"分析失敗: {res.text}")
+                except Exception as e:
+                    st.error(f"錯誤: {e}")
+
+    # --- 顯示結果 (如果有存檔) ---
+    if 'analysis_result' in st.session_state and st.session_state['analysis_result']:
+        data = st.session_state['analysis_result']
+        # 為了避免顯示舊資料的名稱，這裡可以選用存下的名稱，或者保持 UI 當前的狀態
+        # 這裡我們用 session 中的名稱比較安全
+        display_name = st.session_state.get('analysis_stock_name', stock_name)
+
+        col1, col2 = st.columns(2)
+        col1.metric("標的", display_name)
+        col1.metric("現價", f"{data['current_price']:.2f}")
+        col1.metric("趨勢", data['trend'])
+        
+        st.subheader(f"🧠 AI 分析報告")
+        st.info(data['ai_analysis'])
+        
+        # 🔗 Yahoo Finance 連結
+        # 注意：若使用者切換股票代號但沒按分析，這裡的 stock_id 變數會是新的，但 data 是舊的
+        # 為了正確性，我們應該從 data 裡面撈 stock_id (如果後端有回傳)，或者接受這個 UI 不一致
+        # 暫時先用當前 stock_id 生成連結 (通常使用者會預期是同一個)
+        yahoo_url = f"https://tw.stock.yahoo.com/quote/{stock_id}.TW/technical-analysis"
+        st.markdown(f"📊 [查看 Yahoo Finance 技術分析]({yahoo_url})")
+        
+        # 繪製互動式 K 線圖
+        if data.get('technical_data'):
+            try:
+                raw = data['technical_data']
+                df = pd.DataFrame(raw)
+                df['Date'] = pd.to_datetime(df['Date'])
+                df.set_index('Date', inplace=True)
+                
+                # 確保有 OHLC 資料
+                required_cols = ['Open', 'High', 'Low', 'Close']
+                missing_cols = [col for col in required_cols if col not in df.columns]
+                key_levels = extract_key_levels(data['ai_analysis'])
+                if key_levels:
+                        k1, k2, k3 = st.columns(3)
+                        k1.metric("AI 判斷壓力", key_levels['res'])
+                        k2.metric("AI 判斷支撐", key_levels['sup'])
+                        k3.metric("爆量轉折日", key_levels['date'])
+                if missing_cols:
+                    st.error(f"❌ 缺少必要欄位: {missing_cols}")
+                    st.write("可用欄位:", df.columns.tolist())
+                elif all(col in df.columns for col in required_cols):
+                    st.subheader("📈 互動式 K 線圖")
+                    st.caption("💡 提示：可使用滑鼠 hover 查看詳細資訊，點擊右上角工具列可繪製支撐壓力線")
+                    
+                    
+                    # 使用新的互動式圖表函數
+                    # 傳入所有選項，讓函數生成完整的圖表
+                    fig = create_interactive_candlestick_chart(
+                        df, stock_id, chart_style, drawing_color, 
+                        key_levels=key_levels, 
+                        show_ma=default_ma, 
+                        show_bb=default_bb, 
+                        show_vol=default_vol
+                    )
+                    
+                    # 使用 st.write 顯示 Plotly 圖表（比 st.plotly_chart 更穩定）
+                    st.write(fig)
                 else:
-                    st.error(f"分析失敗: {res.text}")
+                    # 如果沒有完整 OHLC 資料，顯示折線圖
+                    st.subheader("📈 收盤價走勢")
+                    st.line_chart(df['Close'])
             except Exception as e:
-                st.error(f"錯誤: {e}")
+                st.error(f"❌ 圖表繪製錯誤: {str(e)}")
+                st.write("錯誤詳情:", type(e).__name__)
+                import traceback
+                st.code(traceback.format_exc())
+        else:
+            st.warning("⚠️ 後端未返回 technical_data")
 
 # ==========================================
 #  頁面 D: 歷史紀錄頁面 (新增)
@@ -839,78 +847,78 @@ def screener_page():
     if st.button("🚀 開始掃描", type="primary"):
         if not selected_strategies:
             st.warning("請至少勾選一個策略！")
-            return
-        
-        if scope_code == "Custom" and not custom_tickers:
+        elif scope_code == "Custom" and not custom_tickers:
             st.error("請輸入自訂股票代號！")
-            return
-
-        st.write("⏳ 正在掃描市場數據，請稍候 (約需 10-15 秒)...")
-        progress_bar = st.progress(0)
-        
-        try:
-            # 呼叫後端 API
-            payload = {
-                "strategies": selected_strategies,
-                "scope": scope_code,
-                "custom_tickers": custom_tickers if scope_code == "Custom" else []
-            }
-            # 假裝跑一下進度條讓使用者覺得有在動
-            progress_bar.progress(30)
+        else:
+            st.write("⏳ 正在掃描市場數據，請稍候 (約需 10-15 秒)...")
+            progress_bar = st.progress(0)
             
-            res = requests.post(f"{BACKEND_URL}/api/screen", json=payload)
-            progress_bar.progress(100)
-            
-            if res.status_code == 200:
-                data = res.json()
+            try:
+                # 呼叫後端 API
+                payload = {
+                    "strategies": selected_strategies,
+                    "scope": scope_code,
+                    "custom_tickers": custom_tickers if scope_code == "Custom" else []
+                }
+                # 假裝跑一下進度條讓使用者覺得有在動
+                progress_bar.progress(30)
                 
-                if not data:
-                    st.warning("⚠️ 目前沒有股票符合您設定的條件。")
+                res = requests.post(f"{BACKEND_URL}/api/screen", json=payload)
+                progress_bar.progress(100)
+                
+                if res.status_code == 200:
+                    st.session_state['screener_result'] = res.json()
                 else:
-                    st.success(f"🎉 找到 {len(data)} 檔符合條件的股票！")
+                    st.error(f"掃描失敗: {res.text}")
                     
-                    # 整理成 DataFrame 顯示
-                    df_res = pd.DataFrame(data)
-                    # 把 list 轉成字串比較好顯示
-                    df_res['matched_strategies'] = df_res['matched_strategies'].apply(lambda x: ", ".join(x))
+            except Exception as e:
+                st.error(f"連線錯誤: {e}")
+
+    # --- 顯示掃描結果 ---
+    if 'screener_result' in st.session_state and st.session_state['screener_result']:
+        data = st.session_state['screener_result']
+        
+        if not data:
+            st.warning("⚠️ 目前沒有股票符合您設定的條件。")
+        else:
+            st.success(f"🎉 找到 {len(data)} 檔符合條件的股票！")
+            
+            # 整理成 DataFrame 顯示
+            df_res = pd.DataFrame(data)
+            # 把 list 轉成字串比較好顯示
+            df_res['matched_strategies'] = df_res['matched_strategies'].apply(lambda x: ", ".join(x))
+            
+            # 🔗 新增 Yahoo Finance 技術分析頁面連結
+            df_res['yahoo_url'] = df_res['stock_id'].apply(
+                lambda x: f"https://tw.stock.yahoo.com/quote/{x}.TW/technical-analysis"
+            )
+            
+            st.dataframe(
+                df_res,
+                column_config={
+                    "yahoo_url": st.column_config.LinkColumn(
+                        "技術分析",
+                        help="點擊開啟 Yahoo 技術分析"
+                    ),
+                    "name": "名稱",
+                    "close": "收盤價",
+                    "matched_strategies": "符合條件",
+                    "stock_id": None  # 隱藏原始股票代號欄位
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # 進階互動：點擊後直接跳轉去分析
+            st.divider()
+            st.markdown("### 👇 快速分析")
+            target = st.selectbox("選擇一檔股票進行 AI 分析", df_res['stock_id'])
                     
-                    # 🔗 新增 Yahoo Finance 技術分析頁面連結
-                    df_res['yahoo_url'] = df_res['stock_id'].apply(
-                        lambda x: f"https://tw.stock.yahoo.com/quote/{x}.TW/technical-analysis"
-                    )
-                    
-                    st.dataframe(
-                        df_res,
-                        column_config={
-                            "yahoo_url": st.column_config.LinkColumn(
-                                "技術分析",
-                                help="點擊開啟 Yahoo 技術分析"
-                            ),
-                            "name": "名稱",
-                            "close": "收盤價",
-                            "matched_strategies": "符合條件",
-                            "stock_id": None  # 隱藏原始股票代號欄位
-                        },
-                        use_container_width=True,
-                        hide_index=True
-                    )
-                    
-                    # 進階互動：點擊後直接跳轉去分析
-                    st.divider()
-                    st.markdown("### 👇 快速分析")
-                    target = st.selectbox("選擇一檔股票進行 AI 分析", df_res['stock_id'])
-                    
-                    if st.button("分析這檔股票"):
-                        # 這邊我們可以用 session_state 傳值並跳轉頁面
-                        st.session_state['analysis_stock_id'] = target
-                        st.switch_page("frontend/app.py") # 注意：如果你是單頁應用，這邊可能要改用 session_state 變數控制頁面切換
-                        # 簡單一點的做法：
-                        st.info(f"請複製代號 **{target}**，切換到「操盤分析」頁面輸入。")
-            else:
-                st.error(f"掃描失敗: {res.text}")
-                
-        except Exception as e:
-            st.error(f"連線錯誤: {e}")
+            if st.button("分析這檔股票"):
+                # 這邊我們可以用 session_state 傳值並跳轉頁面
+                st.session_state['analysis_stock_id'] = target
+                # st.switch_page("frontend/app.py") 
+                st.info(f"請複製代號 **{target}**，切換到「操盤分析」頁面輸入。")
 
 def backtest_page():
     st.title("🔙 智能策略回測")
@@ -960,76 +968,78 @@ def backtest_page():
     if st.button("🚀 開始回測", type="primary"):
         if provider_code == "gemini" and not api_key:
             st.error("Gemini 模式需要 API Key")
-            return
-            
-        with st.spinner(f"正在使用 {provider_code}/{model_name} 進行回測..."):
-            try:
-                payload = {
-                    "user_id": user['id'],
-                    "stock_id": stock_id,
-                    "initial_capital": capital,
-                    "api_key": api_key,
-                    "provider": provider_code,
-                    "model_name": model_name,
-                    "prompt_style": prompt_style
-                }
-                res = requests.post(f"{BACKEND_URL}/api/backtest", json=payload)
-                
-                if res.status_code == 200:
-                    data = res.json()
+        else:    
+            with st.spinner(f"正在使用 {provider_code}/{model_name} 進行回測..."):
+                try:
+                    payload = {
+                        "user_id": user['id'],
+                        "stock_id": stock_id,
+                        "initial_capital": capital,
+                        "api_key": api_key,
+                        "provider": provider_code,
+                        "model_name": model_name,
+                        "prompt_style": prompt_style
+                    }
+                    res = requests.post(f"{BACKEND_URL}/api/backtest", json=payload)
                     
-                    if "error" in data:
-                        st.error(data["error"])
-                        return
-
-                    # --- 顯示 KPI ---
-                    kpi1, kpi2, kpi3 = st.columns(3)
-                    kpi1.metric("初始資金", f"${data['initial_capital']:,}")
-                    kpi2.metric("最終資產", f"${data['final_equity']:,}", delta=f"{data['total_return_pct']}%")
-                    kpi3.metric("總交易次數", data['trade_count'])
-
-                    # --- 繪製資產曲線 ---
-                    st.subheader("📈 資產成長曲線")
-                    ec_df = pd.DataFrame(data['equity_curve'])
-                    ec_df['date'] = pd.to_datetime(ec_df['date'])
-                    ec_df.set_index('date', inplace=True)
-                    st.line_chart(ec_df['equity'])
-
-                    # --- 顯示交易明細 ---
-                    st.subheader("📋 交易明細")
-                    if data['trades']:
-                        trades_df = pd.DataFrame(data['trades'])
-                        display_cols = [
-                            'entry_date', 'exit_date', 'type', 
-                            'entry_price', 'stop_loss', 'take_profit', 'exit_price', # 把 SL/TP 加在中間
-                            'profit', 'profit_pct', 'reason'
-                        ]
-                        
-                        st.dataframe(
-                            trades_df[display_cols],
-                            column_config={
-                                "entry_date": "買入日期",
-                                "exit_date": "賣出日期",
-                                "type": "方向",
-                                "entry_price": st.column_config.NumberColumn("買入價", format="%.2f"),
-                                
-                                # 🔥 新增這兩欄的設定
-                                "stop_loss": st.column_config.NumberColumn("預設停損", format="%.2f"),
-                                "take_profit": st.column_config.NumberColumn("預設停利", format="%.2f"),
-                                
-                                "exit_price": st.column_config.NumberColumn("賣出價", format="%.2f"),
-                                "profit": st.column_config.NumberColumn("損益 (含稅)", format="$%d"),
-                                "profit_pct": st.column_config.NumberColumn("報酬率", format="%.2f%%"),
-                                "reason": "出場原因"
-                            },
-                            use_container_width=True
-                        )
+                    if res.status_code == 200:
+                        st.session_state['backtest_result'] = res.json()
                     else:
-                        st.info("這段期間 AI 選擇觀望，沒有進行任何交易。")
-                else:
-                    st.error(f"回測失敗: {res.text}")
-            except Exception as e:
-                st.error(f"連線錯誤: {e}")
+                        st.error(f"回測失敗: {res.text}")
+                except Exception as e:
+                    st.error(f"連線錯誤: {e}")
+
+    # --- 顯示回測結果 ---
+    if 'backtest_result' in st.session_state and st.session_state['backtest_result']:
+        data = st.session_state['backtest_result']
+        
+        if "error" in data:
+            st.error(data["error"])
+        else:
+            # --- 顯示 KPI ---
+            kpi1, kpi2, kpi3 = st.columns(3)
+            kpi1.metric("初始資金", f"${data['initial_capital']:,}")
+            kpi2.metric("最終資產", f"${data['final_equity']:,}", delta=f"{data['total_return_pct']}%")
+            kpi3.metric("總交易次數", data['trade_count'])
+
+            # --- 繪製資產曲線 ---
+            st.subheader("📈 資產成長曲線")
+            ec_df = pd.DataFrame(data['equity_curve'])
+            ec_df['date'] = pd.to_datetime(ec_df['date'])
+            ec_df.set_index('date', inplace=True)
+            st.line_chart(ec_df['equity'])
+
+            # --- 顯示交易明細 ---
+            st.subheader("📋 交易明細")
+            if data['trades']:
+                trades_df = pd.DataFrame(data['trades'])
+                display_cols = [
+                    'entry_date', 'exit_date', 'type', 
+                    'entry_price', 'stop_loss', 'take_profit', 'exit_price', # 把 SL/TP 加在中間
+                    'profit', 'profit_pct', 'reason'
+                ]
+                
+                st.dataframe(
+                    trades_df[display_cols],
+                    column_config={
+                        "entry_date": "買入日期",
+                        "exit_date": "賣出日期",
+                        "type": "方向",
+                        "entry_price": st.column_config.NumberColumn("買入價", format="%.2f"),
+                        
+                        # 🔥 新增這兩欄的設定
+                        "stop_loss": st.column_config.NumberColumn("預設停損", format="%.2f"),
+                        "take_profit": st.column_config.NumberColumn("預設停利", format="%.2f"),
+                        
+                        "exit_price": st.column_config.NumberColumn("賣出價", format="%.2f"),
+                        "profit": st.column_config.NumberColumn("損益 (含稅)", format="$%d"),
+                        "profit_pct": st.column_config.NumberColumn("報酬率", format="%.2f%%"),
+                        "reason": "出場原因"
+                    },
+                    use_container_width=True
+                )
+            else:
+                st.info("這段期間 AI 選擇觀望，沒有進行任何交易。")
 
 # ==========================================
 #  頁面 F: 回測儀表板 (新增)
@@ -1456,47 +1466,52 @@ def chips_page():
              # 使用 session_state 避免重新整理後消失，或者直接綁定 button
              search_btn = st.button("查詢籌碼", type="primary")
 
-        if search_btn or stock_input:
-            try:
+        if search_btn:
+             try:
                 # 呼叫後端 (預設抓 10 天)
                 res = requests.get(f"{BACKEND_URL}/api/chips/{stock_input}?days=10")
-                
                 if res.status_code == 200:
-                    chip_data = res.json()
-                    
-                    if chip_data:
-                        # 轉為 DataFrame
-                        df_chip = pd.DataFrame(chip_data)
-                        # 先轉為 datetime 物件以便排序或計算
-                        df_chip['DateObj'] = pd.to_datetime(df_chip['date'])
-                        # 格式化為純日期字串 (YYYY-MM-DD) 以去除時間部分
-                        df_chip['Date'] = df_chip['DateObj'].dt.strftime('%Y-%m-%d')
-                        df_chip.set_index('Date', inplace=True)
-                        
-                        # 計算累積買賣超
-                        acc_foreign = df_chip['foreign_net'].sum()
-                        acc_trust = df_chip['trust_net'].sum()
-                        acc_dealer = df_chip['dealer_net'].sum()
-                        
-                        # 顯示 Metric
-                        c1, c2, c3 = st.columns(3)
-                        days_count = len(df_chip)
-                        c1.metric(f"外資累積買賣超 ({days_count}日)", f"{acc_foreign:,} 張", delta=f"{acc_foreign} 張")
-                        c2.metric(f"投信累積買賣超 ({days_count}日)", f"{acc_trust:,} 張", delta=f"{acc_trust} 張")
-                        c3.metric(f"自營商累積買賣超 ({days_count}日)", f"{acc_dealer:,} 張", delta=f"{acc_dealer} 張")
-                        
-                        st.subheader(f"{stock_input} 三大法人買賣超趨勢")
-                        
-                        # 繪圖 (使用 Bar Chart)
-                        # Streamlit 的 bar_chart 可以接受多欄位
-                        st.bar_chart(df_chip[['foreign_net', 'trust_net', 'dealer_net']])
-                    else:
-                        st.warning("查無資料，系統正在嘗試補抓最近的數據，請稍後再試。")
+                    st.session_state['chip_result'] = res.json()
                 else:
                     st.error(f"查詢失敗: {res.text}")
-                    
-            except Exception as e:
+             except Exception as e:
                 st.error(f"連線錯誤: {e}")
+        
+        # 顯示 (如果有資料)
+        if 'chip_result' in st.session_state and st.session_state['chip_result']:
+             chip_data = st.session_state['chip_result']
+             try:
+                # 轉為 DataFrame
+                df_chip = pd.DataFrame(chip_data)
+                
+                # Check if dataframe is empty
+                if not df_chip.empty:
+                    # 先轉為 datetime 物件以便排序或計算
+                    df_chip['DateObj'] = pd.to_datetime(df_chip['date'])
+                    # 格式化為純日期字串 (YYYY-MM-DD) 以去除時間部分
+                    df_chip['Date'] = df_chip['DateObj'].dt.strftime('%Y-%m-%d')
+                    df_chip.set_index('Date', inplace=True)
+                    
+                    # 計算累積買賣超
+                    acc_foreign = df_chip['foreign_net'].sum()
+                    acc_trust = df_chip['trust_net'].sum()
+                    acc_dealer = df_chip['dealer_net'].sum()
+                    
+                    # 顯示 Metric
+                    c1, c2, c3 = st.columns(3)
+                    days_count = len(df_chip)
+                    c1.metric(f"外資累積買賣超 ({days_count}日)", f"{acc_foreign:,} 張", delta=f"{acc_foreign} 張")
+                    c2.metric(f"投信累積買賣超 ({days_count}日)", f"{acc_trust:,} 張", delta=f"{acc_trust} 張")
+                    c3.metric(f"自營商累積買賣超 ({days_count}日)", f"{acc_dealer:,} 張", delta=f"{acc_dealer} 張")
+                    
+                    st.subheader(f"{stock_input} 三大法人買賣超趨勢")
+                    
+                    # 繪圖 (使用 Bar Chart)
+                    st.bar_chart(df_chip[['foreign_net', 'trust_net', 'dealer_net']])
+                else:
+                   st.warning("查無資料，系統正在嘗試補抓最近的數據，請稍後再試。")
+             except Exception as e:
+                 st.error(f"資料處理錯誤: {e} - {chip_data}")
 
     # --- Tab 2: 外資 Top 50 ---
     with tab2:
