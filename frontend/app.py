@@ -1,4 +1,5 @@
 # frontend/app.py
+import numpy as np
 import streamlit as st
 import requests
 import pandas as pd
@@ -824,6 +825,7 @@ def screener_page():
     with col2:
         s4 = st.checkbox("爆量長紅 (主力進場)", key="s4")
         s5 = st.checkbox("RSI 超賣 < 30 (搶反彈)", key="s5")
+        s6 = st.checkbox("5/10/20日 均線糾結 (蓄勢待發)", key="s6")
 
     # 收集選中的策略
     selected_strategies = []
@@ -832,6 +834,7 @@ def screener_page():
     if s3: selected_strategies.append("Bullish_Alignment")
     if s4: selected_strategies.append("Volume_Explosion")
     if s5: selected_strategies.append("RSI_Oversold")
+    if s6: selected_strategies.append("MA_Entanglement")
 
     if st.button("🚀 開始掃描", type="primary"):
         if not selected_strategies:
@@ -1561,7 +1564,7 @@ def auto_report_page():
 
     # 輸入自訂清單
     st.subheader("1. 輸入觀察名單")
-    default_list = "2330, 2454, 2603, 3034, 2881"
+    default_list = "1815,3715,2449,2481,2492,2375,3189,5314,2228,1802,2374,3706,3711,6191,8021,1303,3037,2337,8112,5340,1605,5328,1504,2344,2329,8043,2455,3006,3305,2634,3005,2408,6770,5392,2313,8271,3543,2324,1409,3231,3016,3707,6485,8088,6282,2354,2457,2609,2540,2542,2520,2359,2478,2317,2454,0052,2880,1313,2801,2884,2308,2383,4931,2327,2374,3231,3189,3013,2881,2882,2891,2886,2884,2885,2892,2880,2883,2887,2890,5880,2888,2889,2838,2834,2801,2812,2809,2845,5876,6005"
     user_input = st.text_area("股票代號 (用逗號分隔)", value=default_list, height=100)
     
     # 解析輸入
@@ -1573,15 +1576,17 @@ def auto_report_page():
 
     # 選擇篩選策略
     st.subheader("2. 選擇篩選條件 (通過條件才會被分析)")
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     s1 = c1.checkbox("MA20 突破季線", value=True)
     s2 = c2.checkbox("KD 黃金交叉")
     s3 = c3.checkbox("爆量長紅")
+    s4 = c4.checkbox("均線糾結 (蓄勢待發)")
     
     selected_strategies = []
     if s1: selected_strategies.append("MA_Cross_Major")
     if s2: selected_strategies.append("KD_Golden_Cross")
     if s3: selected_strategies.append("Volume_Explosion")
+    if s4: selected_strategies.append("MA_Entanglement")
 
     # 執行按鈕
     if st.button("🚀 生成 PDF 報告", type="primary"):
