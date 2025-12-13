@@ -144,6 +144,13 @@ class StockService:
                 if entanglement_rate <= 0.025 and price_above_ma:
                     matched.append("5/10/20日均線糾結")
 
+        if "Pullback_Within_Trend" in strategies:
+            # 策略：10MA > 股價 > 20MA
+            # 意義：短線回檔但守住月線支撐，可能為買點
+            # 補充條件：必須是多頭排列 MA10 > MA20，確保不是空頭走勢的下跌
+            if ma10.iloc[-1] > curr['Close'] > ma20.iloc[-1] and ma10.iloc[-1] > ma20.iloc[-1]:
+                 matched.append("回檔修正(10MA>股價>20MA)")
+
 
         return matched
 

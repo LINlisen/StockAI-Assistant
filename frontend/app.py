@@ -150,6 +150,41 @@ def create_interactive_candlestick_chart(df, stock_id, chart_style, drawing_colo
                 ),
                 row=1, col=1
             )
+            
+            # --- 新增: 均線扣抵 (Deduction) 標示 ---
+            # 扣抵日 = 今天往回推 N-1 天 (也就是第 N 根 K 棒)
+            # 例如 MA5，扣抵的就是 4 天前的那根 (包含今天共 5 根)
+            # 我們在該日期上方畫一個倒三角形標示
+            try:
+                ma_period = int(ma_name.replace("MA", ""))
+                # 確保資料長度足夠
+                if len(df) >= ma_period:
+                    # 取得扣抵日的 Index (日期)
+                    deduction_date = df.index[-ma_period]
+                    
+                    # 修改: 將標示畫在圖表下方 (Low 的最小值再往下 1%)，避免遮擋 K 線
+                    # 使用 triangle-up (向上三角形) 指向當天的 K 棒
+                    deduction_y = df['Low'].min() * 0.99
+                    
+                    # 檢查該 trace 是否預設顯示，如果隱藏則扣抵三角形也隱藏
+                    marker_visible = is_visible
+                    
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[deduction_date],
+                            y=[deduction_y],
+                            mode="markers",
+                            name=f"{ma_names_zh[ma_name]}扣抵",
+                            marker=dict(symbol="triangle-up", size=10, color=color),
+                            hovertemplate=f"<b>{ma_names_zh[ma_name]}扣抵日</b><br>扣抵價: {df.loc[deduction_date, 'Close']:.2f}<extra></extra>",
+                            visible=marker_visible,
+                            showlegend=False  # 不要在圖例多顯示一個項目，避免雜亂
+                        ),
+                        row=1, col=1
+                    )
+            except Exception as e:
+                # 避免因為資料不足或轉換失敗導致程式崩潰
+                pass
 
     # 加入布林通道 (如果有資料)
     # 與均線邏輯相同，預設加入圖表
@@ -823,6 +858,7 @@ def screener_page():
     st.divider()
 
     # 策略選擇區
+    # 策略選擇區
     st.subheader("1. 選擇策略條件")
     
     col1, col2 = st.columns(2)
@@ -830,6 +866,7 @@ def screener_page():
         s1 = st.checkbox("MA20 突破季線且站上半年線 (趨勢轉強)", value=True, key="s1")
         s2 = st.checkbox("KD 低檔黃金交叉 (短線買點)", key="s2")
         s3 = st.checkbox("均線多頭排列 (強勢股)", key="s3")
+        s7 = st.checkbox("回檔修正 (10MA > 股價 > 20MA)", key="s7")
     with col2:
         s4 = st.checkbox("爆量長紅 (主力進場)", key="s4")
         s5 = st.checkbox("RSI 超賣 < 30 (搶反彈)", key="s5")
@@ -843,6 +880,7 @@ def screener_page():
     if s4: selected_strategies.append("Volume_Explosion")
     if s5: selected_strategies.append("RSI_Oversold")
     if s6: selected_strategies.append("MA_Entanglement")
+    if s7: selected_strategies.append("Pullback_Within_Trend")
 
     if st.button("🚀 開始掃描", type="primary"):
         if not selected_strategies:
